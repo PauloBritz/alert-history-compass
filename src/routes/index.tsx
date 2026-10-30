@@ -32,8 +32,8 @@ const DECISAO: Record<Decisao, { titulo: string; icon: typeof Repeat; tone: stri
 };
 
 function Index() {
-  const [data, setData] = useState<Resultado>(DEMOS[0].data);
-  const [texto, setTexto] = useState(DEMOS[0].data.evento);
+  const [data, setData] = useState<Resultado>(DEMOS[0]!.data);
+  const [texto, setTexto] = useState(DEMOS[0]!.data.evento);
   const [apiUrl, setApiUrl] = useState("");
   const [otrsBase, setOtrsBase] = useState(OTRS_BASE_DEFAULT);
   const [panel, setPanel] = useState<null | "json" | "config">(null);
