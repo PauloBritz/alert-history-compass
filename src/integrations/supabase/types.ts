@@ -14,13 +14,94 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      kb_solucoes: {
+        Row: {
+          autor: string | null
+          created_at: string
+          evento: string
+          id: string
+          origem: string
+          solucao: string
+          ticket_numero: string | null
+        }
+        Insert: {
+          autor?: string | null
+          created_at?: string
+          evento: string
+          id?: string
+          origem?: string
+          solucao: string
+          ticket_numero?: string | null
+        }
+        Update: {
+          autor?: string | null
+          created_at?: string
+          evento?: string
+          id?: string
+          origem?: string
+          solucao?: string
+          ticket_numero?: string | null
+        }
+        Relationships: []
+      }
+      kb_votos: {
+        Row: {
+          comentario: string | null
+          created_at: string
+          evento: string | null
+          id: string
+          positivo: boolean
+          solucao_id: string
+        }
+        Insert: {
+          comentario?: string | null
+          created_at?: string
+          evento?: string | null
+          id?: string
+          positivo: boolean
+          solucao_id: string
+        }
+        Update: {
+          comentario?: string | null
+          created_at?: string
+          evento?: string | null
+          id?: string
+          positivo?: boolean
+          solucao_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kb_votos_solucao_id_fkey"
+            columns: ["solucao_id"]
+            isOneToOne: false
+            referencedRelation: "kb_solucoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      kb_buscar: {
+        Args: { _limite?: number; _texto: string }
+        Returns: {
+          autor: string
+          created_at: string
+          evento: string
+          id: string
+          negativos: number
+          origem: string
+          positivos: number
+          positivos_30d: number
+          similaridade: number
+          solucao: string
+          ticket_numero: string
+        }[]
+      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       [_ in never]: never
