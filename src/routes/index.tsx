@@ -6,7 +6,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { DEMOS, parseResultado, type Candidato, type Decisao, type Resultado } from "@/lib/otrs";
+import { DEMOS, artigosDe, parseResultado, type Candidato, type Decisao, type Resultado } from "@/lib/otrs";
+import { KbPanel } from "@/components/KbPanel";
+import { salvarSolucao } from "@/lib/kb";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -77,7 +79,8 @@ function Index() {
   const candidatos = useMemo(() => data.candidatos.filter((c) =>
     filtro === "abertos" ? c.aberto : filtro === "duplicados" ? c.classe === "PROVAVEL_DUPLICADO" : true), [data, filtro]);
 
-  const comSolucao = data.candidatos.filter((c) => c.ultimas_notas?.length);
+  const comSolucao = data.candidatos.filter((c) => artigosDe(c).length);
+  const [kbKey, setKbKey] = useState(0);
 
   return (
     <div className="min-h-screen">
@@ -157,6 +160,8 @@ function Index() {
 
         <Decision data={data} />
 
+        <KbPanel evento={data.evento} refreshKey={kbKey} />
+
         {/* KPIs */}
         <section className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
           <Kpi icon={History} label="Chamados analisados" value={data.chamados_analisados} />
@@ -186,7 +191,7 @@ function Index() {
               </div>
             ) : (
               <div className="space-y-3">
-                {candidatos.map((c, i) => <TicketCard key={c.ticket_id} c={c} otrsBase={otrsBase} defaultOpen={i === 0} />)}
+                {candidatos.map((c, i) => <TicketCard key={c.ticket_id} c={c} otrsBase={otrsBase} defaultOpen={i === 0} evento={data.evento} onSaved={() => setKbKey((k) => k + 1)} />)}
               </div>
             )}
 
@@ -194,11 +199,11 @@ function Index() {
               <div className="mt-8">
                 <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Wrench className="size-4 text-primary" /> Soluções aplicadas anteriormente</h2>
                 <div className="relative space-y-4 border-l pl-6">
-                  {comSolucao.flatMap((c) => c.ultimas_notas!.map((n, j) => (
+                  {comSolucao.flatMap((c) => artigosDe(c).map((n, j) => (
                     <div key={c.ticket_id + j} className="relative">
                       <span className="absolute -left-[31px] top-1.5 size-3 rounded-full border-2 border-primary bg-background" />
                       <div className="font-mono text-xs text-muted-foreground">{n.criado} · #{c.numero} · {n.autor}</div>
-                      <p className="mt-1 text-sm">{n.texto}</p>
+                      <p className="mt-1 line-clamp-4 whitespace-pre-line text-sm">{n.texto}</p>
                     </div>
                   )))}
                 </div>
@@ -316,8 +321,16 @@ function ScoreRing({ score, tone }: { score: number; tone: string }) {
   );
 }
 
-function TicketCard({ c, otrsBase, defaultOpen }: { c: Candidato; otrsBase: string; defaultOpen: boolean }) {
+function TicketCard({ c, otrsBase, defaultOpen, evento, onSaved }: { c: Candidato; otrsBase: string; defaultOpen: boolean; evento: string; onSaved: () => void }) {
   const [open, setOpen] = useState(defaultOpen);
+  const artigos = artigosDe(c);
+  const resumo = artigos[artigos.length - 1]?.texto.replace(/\s+/g, " ");
+  async function salvarNaBase(texto: string, autor: string) {
+    try {
+      await salvarSolucao({ evento: c.titulo.replace(/\s+/g, " ").trim() || evento, solucao: texto, ticket_numero: c.numero, autor, origem: "otrs" });
+      toast.success("Solução salva na base de conhecimento"); onSaved();
+    } catch (e) { toast.error((e as Error).message); }
+  }
   const dup = c.classe === "PROVAVEL_DUPLICADO";
   const tone = dup ? "text-warning" : c.classe === "RELACIONADO" ? "text-info" : "text-muted-foreground";
   const link = `${otrsBase}?Action=AgentTicketZoom;TicketID=${c.ticket_id}`;
@@ -341,6 +354,11 @@ function TicketCard({ c, otrsBase, defaultOpen }: { c: Candidato; otrsBase: stri
             <span className="inline-flex items-center gap-1"><Clock className="size-3" />{c.criado}</span>
             {c.duracao && <span className="inline-flex items-center gap-1"><History className="size-3" />{c.duracao}</span>}
           </div>
+          {resumo && (
+            <p className="mt-2 line-clamp-2 rounded-md border-l-2 border-primary bg-surface px-2 py-1 text-xs text-muted-foreground">
+              <Wrench className="mr-1 inline size-3 text-primary" />{resumo}
+            </p>
+          )}
         </div>
         <ChevronDown className={`size-5 shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
       </button>
@@ -359,10 +377,20 @@ function TicketCard({ c, otrsBase, defaultOpen }: { c: Candidato; otrsBase: stri
           <ul className="space-y-1 text-xs text-muted-foreground">
             {c.motivos.map((m) => <li key={m} className="flex gap-2"><Tag className="mt-0.5 size-3 shrink-0" />{m}</li>)}
           </ul>
-          {c.ultimas_notas?.map((n, i) => (
+          {artigos.length > 0 && (
+            <div className="text-xs font-medium text-primary">Solução aplicada{c.solucao?.origem ? ` · ${c.solucao.origem}` : ""}</div>
+          )}
+          {artigos.map((n, i) => (
             <div key={i} className="rounded-xl border-l-2 border-primary bg-surface p-3">
-              <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground"><Wrench className="size-3 text-primary" />{n.autor} · {n.criado}</div>
-              <p className="mt-1 whitespace-pre-line text-sm">{n.texto}</p>
+              <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
+                <Wrench className="size-3 text-primary" />{n.autor} · {n.criado}
+                <button onClick={() => salvarNaBase(n.texto, n.autor.split(" via ")[0] ?? n.autor)}
+                  className="ml-auto rounded-md border px-2 py-0.5 font-sans text-xs text-foreground hover:border-primary hover:text-primary">
+                  Salvar na base
+                </button>
+              </div>
+              {"assunto" in n && n.assunto && <div className="mt-1 text-xs text-muted-foreground">{n.assunto}</div>}
+              <p className="mt-2 max-h-80 overflow-auto whitespace-pre-line text-sm">{n.texto}</p>
             </div>
           ))}
           <div className="flex gap-2">
