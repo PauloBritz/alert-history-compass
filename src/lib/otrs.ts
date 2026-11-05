@@ -9,6 +9,14 @@ export interface Candidato {
   tipo_encerramento: string; duracao: string; palavras_iguais: string[];
   palavras_parecidas: string[]; palavras_faltando: string[]; cobertura: number;
   score: number; classe: Classe; motivos: string[]; ultimas_notas?: Nota[];
+  solucao?: { origem?: string; artigos: Artigo[] };
+}
+export interface Artigo { criado: string; tipo: string; autor: string; assunto?: string; texto: string }
+
+/** Artigos de solução do candidato (campo novo `solucao.artigos`, com fallback para `ultimas_notas`). */
+export function artigosDe(c: Candidato): Artigo[] {
+  if (c.solucao?.artigos?.length) return c.solucao.artigos;
+  return c.ultimas_notas ?? [];
 }
 export interface Resultado {
   evento: string; palavras: string[]; pesos: Record<string, number>; host: string | null;
@@ -74,7 +82,11 @@ export const DEMO_NOVO: Resultado = {
   mensagem: "Nenhum chamado parecido no período; pode abrir um novo.", candidatos: [],
 };
 
+import demoZabbix from "./demo-zabbix.json";
+export const DEMO_ZABBIX = demoZabbix as unknown as Resultado;
+
 export const DEMOS = [
+  { label: "LVHA3034M Zabbix agent", data: DEMO_ZABBIX, real: true },
   { label: "FNDE - Temperature", data: DEMO_FNDE, real: true },
   { label: "Badesul - SRV01 Down", data: DEMO_BADESUL, real: false },
   { label: "SWAS_SD13_03", data: DEMO_NOVO, real: true },
