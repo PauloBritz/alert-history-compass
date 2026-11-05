@@ -1,0 +1,162 @@
+{
+ "evento": "Alerta Badesul - LVHA3034M (LVHA3034M) Zabbix agent is not available (for 5m)",
+ "palavras": [
+  "zabbix",
+  "agent",
+  "not",
+  "available"
+ ],
+ "pesos": {
+  "zabbix": 1,
+  "agent": 1,
+  "not": 0.5,
+  "available": 1
+ },
+ "host": "LVHA3034M",
+ "ips": [],
+ "categorias": [
+  "agente"
+ ],
+ "periodo": {
+  "desde": "2026-01-02 09:00:00",
+  "ate": null
+ },
+ "buscas_realizadas": [
+  "lvha3034m",
+  "zabbix agent"
+ ],
+ "chamados_encontrados": 3,
+ "chamados_analisados": 3,
+ "resumo": {
+  "mesmo_evento": 3,
+  "relacionados": 0,
+  "ainda_abertos": 0
+ },
+ "decisao": "RECORRENCIA",
+ "mensagem": "Evento recorrente: chamados anteriores do mesmo evento com solução registrada.",
+ "candidatos": [
+  {
+   "ticket_id": "216562",
+   "numero": "2026102969000671",
+   "titulo": "Badesul - \tLVHA3034M (LVHA3034M) Zabbix agent is not available (for 5m)",
+   "estado": "closed successful",
+   "tipo_estado": "closed",
+   "aberto": false,
+   "criado": "2026-10-29 13:21:15",
+   "dono": "henrique.amaral",
+   "alterado": "2026-10-29 16:45:02",
+   "causa": "",
+   "tipo_encerramento": "2. Solução Definitiva",
+   "duracao": "3h 23min",
+   "palavras_iguais": [
+    "zabbix",
+    "agent",
+    "not",
+    "available"
+   ],
+   "palavras_parecidas": [],
+   "palavras_faltando": [],
+   "cobertura": 1.0,
+   "score": 96,
+   "classe": "PROVAVEL_DUPLICADO",
+   "motivos": [
+    "palavras iguais: zabbix, agent, not, available (4/4)",
+    "sequência igual em 100% dos pares de palavras"
+   ],
+   "solucao": {
+    "origem": "antes do pedido de fechamento",
+    "artigos": [
+     {
+      "criado": "2026-10-29 14:37:52",
+      "tipo": "email-external",
+      "autor": "Henrique Terra Amaral via Central de Serviços - InterOp <centraldeservicos@interop.com.br>",
+      "assunto": "Re: [Chamado#2026102969000671] Badesul -  LVHA3034M (LVHA3034M) Zabbix agent is not available (for 5m)",
+      "texto": "Prezado(a) Cleber Ferrari,\nDemanda atualizada:\n- Prezado Cliente,\n\nSegue abaixo o(s) alerta(s) detectados pela equipe de Monitoração da InterOp.\n\nInformações Importantes:\n- Nenhuma\n\nAções Realizadas:\n-  Segue em Evidencias\n\nAções Pendentes:\n- Nenhuma\n\nEvidências:\n  Boa tarde Prezados\n Durante a análise realizada na LVHA3034M 10.245.5.99 foi identificado uma\nfalha na inicialização do serviço Zabbix Agent.\n Foi constatado que o serviço não conseguia criar o arquivo PID em:\n\n/run/zabbix/zabbix_agent2.pid\n\n devido à ausência do diretório \n\n/run/zabbix\n\n. Como consequência, o Zabbix Agent 2 entrava em um ciclo contínuo de\nreinicializações, não permanecendo em execução.\n Para correção, foram realizadas as seguintes ações:\n   Criação do diretório \n\n/run/zabbix\n\n   Ajuste das permissões e proprietário do diretório para o usuário e grupo \n\nzabbix\n\n   Reinicialização e validação do serviço Zabbix Agent\n\n Após os ajustes, o serviço foi iniciado com sucesso e permaneceu em execução,\nnormalizando a comunicação do agente com o ambiente de monitoramento.\n Fico no aguardo do seu OK para encerramento do chamado aberto\n  \n Evidencias:\n\nHenrique Terra Amaral\nInterOp – Central de Monitoramento e Operação\nFone: 55 51 3216 7030, 55 11 4063 7881\n--"
+     }
+    ]
+   }
+  },
+  {
+   "ticket_id": "213966",
+   "numero": "2026100669001104",
+   "titulo": "Badesul - LVHA3034M (LVHA3034M) Zabbix agent is not available (for 5m)",
+   "estado": "closed successful",
+   "tipo_estado": "closed",
+   "aberto": false,
+   "criado": "2026-10-06 18:19:26",
+   "dono": "henrique.amaral",
+   "alterado": "2026-10-07 12:45:01",
+   "causa": "",
+   "tipo_encerramento": "2. Solução Definitiva",
+   "duracao": "18h 25min",
+   "palavras_iguais": [
+    "zabbix",
+    "agent",
+    "not",
+    "available"
+   ],
+   "palavras_parecidas": [],
+   "palavras_faltando": [],
+   "cobertura": 1.0,
+   "score": 96,
+   "classe": "PROVAVEL_DUPLICADO",
+   "motivos": [
+    "palavras iguais: zabbix, agent, not, available (4/4)",
+    "sequência igual em 100% dos pares de palavras"
+   ],
+   "solucao": {
+    "origem": "antes do pedido de fechamento",
+    "artigos": [
+     {
+      "criado": "2026-10-07 10:06:17",
+      "tipo": "email-external",
+      "autor": "Henrique Terra Amaral via Central de Serviços - InterOp <centraldeservicos@interop.com.br>",
+      "assunto": "Re: [Chamado#2026100669001104] Badesul - LVHA3034M (LVHA3034M) Zabbix agent is not available (for 5m)",
+      "texto": "Prezado(a) Cleber Ferrari,\nDemanda atualizada:\n- Prezado Cliente,\n\nSegue abaixo o(s) alerta(s) detectados pela equipe de Monitoração da InterOp.\n\nInformações Importantes:\n- Nenhuma\n\nAções Realizadas:\n-  Segue em Evidencias\n- Previsao de encerramento 10/10\n\nAções Pendentes:\n- Nenhuma\n\nEvidências:\n-  \n \nHenrique Terra Amaral\nInterOp – Central de Monitoramento e Operação\nFone: 55 51 3216 7030, 55 11 4063 7881\n--"
+     }
+    ]
+   }
+  },
+  {
+   "ticket_id": "210898",
+   "numero": "2026092169001178",
+   "titulo": "VM701086 (LVPI1175M) - Zabbix agent is not available (for 5m)",
+   "estado": "closed successful",
+   "tipo_estado": "closed",
+   "aberto": false,
+   "criado": "2026-09-21 18:56:06",
+   "dono": "marcos.oliveira",
+   "alterado": "2026-09-22 00:45:02",
+   "causa": "",
+   "tipo_encerramento": "2. Solução Definitiva",
+   "duracao": "5h 48min",
+   "palavras_iguais": [
+    "zabbix",
+    "agent",
+    "not",
+    "available"
+   ],
+   "palavras_parecidas": [],
+   "palavras_faltando": [],
+   "cobertura": 1.0,
+   "score": 96,
+   "classe": "PROVAVEL_DUPLICADO",
+   "motivos": [
+    "palavras iguais: zabbix, agent, not, available (4/4)",
+    "sequência igual em 100% dos pares de palavras"
+   ],
+   "solucao": {
+    "origem": "antes do pedido de fechamento",
+    "artigos": [
+     {
+      "criado": "2026-09-21 21:51:05",
+      "tipo": "email-external",
+      "autor": "Marcos Vinicio Ribeiro de Oliveira via Central de Serviços - InterOp <centraldeservicos@interop.com.br>",
+      "assunto": "Re: [Chamado#2026092169001178] VM701086 (LVPI1175M) - Zabbix agent is not available (for 5m)",
+      "texto": "Prezado(a) Cleber Ferrari,\nDemanda atualizada:\n- Fui acionado para verificar a indisponibilidade do agente Zabbix do servidor\nVM701086 \n\nInformações Importantes:\n- Validei que o diretorio /run/zabbix não estava com as permissões corretas\n\nAções Realizadas:\n- Analise de logs\n- Ajuste do diretorio /run/zabbix\n- restart do Agente\n\nValidação do monitoramento\n\nAções Pendentes:\n- Encerrar o chamado\n\nEvidências:\n- [copy/paste de e-mails e/ou prints do atendimento]\n--\nMarcos Vinicio Ribeiro de Oliveira\nInterOp – Central de Monitoramento e Operação\nFone: 55 51 3216 7030, 55 11 4063 7881\n--"
+     }
+    ]
+   }
+  }
+ ]
+}
