@@ -14,10 +14,46 @@ export type Database = {
   }
   public: {
     Tables: {
+      kb_eventos: {
+        Row: {
+          created_at: string
+          evento: string
+          id: string
+          resolvido_em: string | null
+          solucao_id: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          evento: string
+          id?: string
+          resolvido_em?: string | null
+          solucao_id?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          evento?: string
+          id?: string
+          resolvido_em?: string | null
+          solucao_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kb_eventos_solucao_id_fkey"
+            columns: ["solucao_id"]
+            isOneToOne: false
+            referencedRelation: "kb_solucoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kb_solucoes: {
         Row: {
           autor: string | null
           created_at: string
+          embedding: string | null
           evento: string
           id: string
           origem: string
@@ -27,6 +63,7 @@ export type Database = {
         Insert: {
           autor?: string | null
           created_at?: string
+          embedding?: string | null
           evento: string
           id?: string
           origem?: string
@@ -36,6 +73,7 @@ export type Database = {
         Update: {
           autor?: string | null
           created_at?: string
+          embedding?: string | null
           evento?: string
           id?: string
           origem?: string
