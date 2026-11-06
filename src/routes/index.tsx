@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { DEMOS, artigosDe, parseResultado, type Candidato, type Decisao, type Resultado } from "@/lib/otrs";
 import { KbPanel } from "@/components/KbPanel";
-import { salvarSolucao } from "@/lib/kb";
+import { salvarSolucao, solucaoDoTicket, taxaSucesso, votar, type StatsSolucao } from "@/lib/kb";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -423,6 +423,10 @@ function TicketCard({ c, otrsBase, defaultOpen, feedback, evento, onSaved }: { c
         </div>
         <ChevronDown className={`size-5 shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
       </button>
+      {feedback && artigos.length > 0 && (
+        <FeedbackTicket c={c} evento={evento} solucao={artigos[artigos.length - 1]!.texto}
+          autor={artigos[artigos.length - 1]!.autor.split(" via ")[0] ?? ""} onSaved={onSaved} />
+      )}
       {open && (
         <div className="space-y-4 border-t p-4">
           <div className="grid gap-3 text-sm sm:grid-cols-3">
