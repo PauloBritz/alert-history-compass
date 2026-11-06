@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { BookOpenCheck, ChevronDown, Loader2, Plus, ThumbsDown, ThumbsUp, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
-import { buscarKb, salvarSolucao, taxaSucesso, votar, type KbSolucao } from "@/lib/kb";
+import { buscarKb, registrarEventoNovo, resolverEvento, salvarSolucao, taxaSucesso, votar, type KbSolucao } from "@/lib/kb";
 
-export function KbPanel({ evento, refreshKey }: { evento: string; refreshKey: number }) {
+export function KbPanel({ evento, refreshKey, semHistorico }: { evento: string; refreshKey: number; semHistorico: boolean }) {
   const [itens, setItens] = useState<KbSolucao[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [novo, setNovo] = useState(false);
@@ -34,6 +34,8 @@ export function KbPanel({ evento, refreshKey }: { evento: string; refreshKey: nu
           <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Consultando a base…</div>
         ) : erro ? (
           <p className="text-sm text-destructive">Não foi possível consultar a base: {erro}</p>
+        ) : itens.length === 0 && semHistorico ? (
+          <EventoNovo evento={evento} onSaved={carregar} />
         ) : itens.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nenhuma solução cadastrada para eventos parecidos. Salve a solução de um chamado abaixo ou cadastre uma nova.</p>
         ) : itens.map((s, i) => <KbItem key={s.id} s={s} evento={evento} destaque={i === 0} onChange={carregar} />)}
@@ -81,9 +83,12 @@ function KbItem({ s, evento, destaque, onChange }: { s: KbSolucao; evento: strin
         <ChevronDown className={`size-5 shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="space-y-3 border-t p-4">
+        <div className="border-t px-4 pt-4">
           <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-background p-3 font-sans text-sm leading-relaxed">{s.solucao}</pre>
-          {s.autor && <p className="text-xs text-muted-foreground">Registrada por {s.autor}</p>}
+          {s.autor && <p className="mt-2 text-xs text-muted-foreground">Registrada por {s.autor}</p>}
+        </div>
+      )}
+      <div className="space-y-3 p-4 pt-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-muted-foreground">Aplicou esta solução? Funcionou?</span>
             <button disabled={busy} onClick={positivo} aria-label="Funcionou"
@@ -96,8 +101,7 @@ function KbItem({ s, evento, destaque, onChange }: { s: KbSolucao; evento: strin
             </button>
           </div>
           {falhou && <SolucaoCorreta s={s} evento={evento} onDone={() => { setFalhou(false); onChange(); }} />}
-        </div>
-      )}
+      </div>
     </article>
   );
 }
@@ -126,6 +130,42 @@ function SolucaoCorreta({ s, evento, onDone }: { s: KbSolucao; evento: string; o
         <input value={autor} onChange={(e) => setAutor(e.target.value)} placeholder="Seu nome (opcional)"
           className="h-9 flex-1 rounded-lg border bg-surface px-3 text-sm outline-none" />
         <button disabled={busy} onClick={enviar} className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
+          {busy ? "Salvando…" : "Registrar solução"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EventoNovo({ evento, onSaved }: { evento: string; onSaved: () => void }) {
+  const [regId, setRegId] = useState<string | null>(null);
+  const [texto, setTexto] = useState("");
+  const [autor, setAutor] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    registrarEventoNovo(evento).then((id) => vivo && setRegId(id)).catch(() => {});
+    return () => { vivo = false; };
+  }, [evento]);
+  async function salvar() {
+    if (texto.trim().length < 5) { toast.error("Descreva a solução aplicada."); return; }
+    setBusy(true);
+    try {
+      const id = await salvarSolucao({ evento, solucao: texto.trim(), autor: autor.trim() || null, origem: "analista" });
+      if (regId) await resolverEvento(regId, id);
+      toast.success("Solução registrada. Na próxima ocorrência ela será recomendada.");
+      onSaved();
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+  }
+  return (
+    <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
+      <p className="font-medium">Evento novo registrado na base{regId ? "" : "…"}</p>
+      <p className="mt-1 text-sm text-muted-foreground">Ainda não há histórico para este evento. Após o atendimento, informe qual foi a solução aplicada para que ela fique disponível aos próximos analistas.</p>
+      <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={6} placeholder="Informações importantes, ações realizadas, validação…"
+        className="mt-3 w-full rounded-lg border bg-surface p-3 text-sm outline-none focus:shadow-glow" />
+      <div className="mt-2 flex flex-wrap gap-2">
+        <input value={autor} onChange={(e) => setAutor(e.target.value)} placeholder="Seu nome (opcional)" className="h-9 flex-1 rounded-lg border bg-surface px-3 text-sm outline-none" />
+        <button disabled={busy} onClick={salvar} className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
           {busy ? "Salvando…" : "Registrar solução"}
         </button>
       </div>
