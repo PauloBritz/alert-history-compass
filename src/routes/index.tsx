@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, CheckCircle2, ChevronDown, Clock, Copy, ExternalLink, FileJson,
-  History, Loader2, Network, Repeat, Search, Server, Settings2, Sparkles, Tag, User, Wrench,
+  History, Loader2, Network, Repeat, Search, Server, Settings2, Sparkles, Tag, ThumbsDown, ThumbsUp, User, Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
