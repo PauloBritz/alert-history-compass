@@ -30,7 +30,7 @@ const DECISAO: Record<Decisao, { titulo: string; icon: typeof Repeat; tone: stri
   JA_EXISTE_ABERTO: { titulo: "Já existe chamado aberto", icon: AlertTriangle, tone: "text-destructive", ring: "border-destructive/50 bg-destructive/10" },
   RECORRENCIA: { titulo: "Evento recorrente", icon: Repeat, tone: "text-warning", ring: "border-warning/50 bg-warning/10" },
   REVISAR: { titulo: "Revisar relacionados", icon: Search, tone: "text-info", ring: "border-info/50 bg-info/10" },
-  NOVO: { titulo: "Evento inédito", icon: Sparkles, tone: "text-success", ring: "border-success/50 bg-success/10" },
+  NOVO: { titulo: "Evento sem histórico", icon: Sparkles, tone: "text-success", ring: "border-success/50 bg-success/10" },
 };
 
 function Index() {
@@ -79,7 +79,6 @@ function Index() {
   const candidatos = useMemo(() => data.candidatos.filter((c) =>
     filtro === "abertos" ? c.aberto : filtro === "duplicados" ? c.classe === "PROVAVEL_DUPLICADO" : true), [data, filtro]);
 
-  const comSolucao = data.candidatos.filter((c) => artigosDe(c).length);
   const [kbKey, setKbKey] = useState(0);
 
   return (
@@ -160,7 +159,7 @@ function Index() {
 
         <Decision data={data} />
 
-        <KbPanel evento={data.evento} refreshKey={kbKey} />
+        <KbPanel evento={data.evento} refreshKey={kbKey} semHistorico={data.candidatos.length === 0} />
 
         {/* KPIs */}
         <section className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -195,20 +194,6 @@ function Index() {
               </div>
             )}
 
-            {comSolucao.length > 0 && (
-              <div className="mt-8">
-                <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Wrench className="size-4 text-primary" /> Soluções aplicadas anteriormente</h2>
-                <div className="relative space-y-4 border-l pl-6">
-                  {comSolucao.flatMap((c) => artigosDe(c).map((n, j) => (
-                    <div key={c.ticket_id + j} className="relative">
-                      <span className="absolute -left-[31px] top-1.5 size-3 rounded-full border-2 border-primary bg-background" />
-                      <div className="font-mono text-xs text-muted-foreground">{n.criado} · #{c.numero} · {n.autor}</div>
-                      <p className="mt-1 line-clamp-4 whitespace-pre-line text-sm">{n.texto}</p>
-                    </div>
-                  )))}
-                </div>
-              </div>
-            )}
           </section>
         </div>
       </main>
@@ -243,7 +228,7 @@ function Decision({ data }: { data: Resultado }) {
       <div>
         <div className={`font-mono text-xs uppercase tracking-widest ${d.tone}`}>Recomendação</div>
         <div className="text-xl font-semibold">{d.titulo}</div>
-        <p className="mt-1 text-sm text-muted-foreground">{data.mensagem}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{data.decisao === "NOVO" ? "Nenhum chamado parecido no período. O evento foi registrado na base — informe a solução aplicada ao final do atendimento." : data.mensagem}</p>
       </div>
     </section>
   );
