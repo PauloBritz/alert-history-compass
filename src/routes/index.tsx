@@ -1,14 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, CheckCircle2, ChevronDown, Clock, Copy, ExternalLink, FileJson,
-  History, Loader2, Network, Repeat, Search, Server, Settings2, Sparkles, Tag, User, Wrench,
+  History, Loader2, Network, Repeat, Search, Server, Settings2, Sparkles, Tag, ThumbsDown, ThumbsUp, User, Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { DEMOS, artigosDe, parseResultado, type Candidato, type Decisao, type Resultado } from "@/lib/otrs";
 import { KbPanel } from "@/components/KbPanel";
-import { salvarSolucao } from "@/lib/kb";
+import { salvarSolucao, solucaoDoTicket, taxaSucesso, votar, type StatsSolucao } from "@/lib/kb";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -190,7 +190,7 @@ function Index() {
               </div>
             ) : (
               <div className="space-y-3">
-                {candidatos.map((c, i) => <TicketCard key={c.ticket_id} c={c} otrsBase={otrsBase} defaultOpen={i === 0} evento={data.evento} onSaved={() => setKbKey((k) => k + 1)} />)}
+                {candidatos.map((c, i) => <TicketCard key={c.ticket_id} c={c} otrsBase={otrsBase} defaultOpen={i === 0} feedback={i === 0} evento={data.evento} onSaved={() => setKbKey((k) => k + 1)} />)}
               </div>
             )}
 
@@ -306,7 +306,83 @@ function ScoreRing({ score, tone }: { score: number; tone: string }) {
   );
 }
 
-function TicketCard({ c, otrsBase, defaultOpen, evento, onSaved }: { c: Candidato; otrsBase: string; defaultOpen: boolean; evento: string; onSaved: () => void }) {
+function FeedbackTicket({ c, evento, solucao, autor, onSaved }: { c: Candidato; evento: string; solucao: string; autor: string; onSaved: () => void }) {
+  const [info, setInfo] = useState<{ id: string; stats: StatsSolucao } | null | undefined>(undefined);
+  const [falhou, setFalhou] = useState(false);
+  const [correta, setCorreta] = useState("");
+  const [nome, setNome] = useState("");
+  const [busy, setBusy] = useState(false);
+  const carregar = useCallback(() => { solucaoDoTicket(c.numero).then(setInfo).catch(() => setInfo(null)); }, [c.numero]);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  async function garantirId() {
+    if (info) return info.id;
+    try {
+      return await salvarSolucao({ evento: c.titulo.replace(/\s+/g, " ").trim() || evento, solucao, ticket_numero: c.numero, autor, origem: "otrs" });
+    } catch {
+      const r = await solucaoDoTicket(c.numero);
+      if (!r) throw new Error("Não foi possível registrar a solução na base.");
+      return r.id;
+    }
+  }
+  async function positivo() {
+    setBusy(true);
+    try { await votar(await garantirId(), true, evento); toast.success("Obrigado! A solução ganhou credibilidade."); carregar(); onSaved(); }
+    catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+  }
+  async function negativo() {
+    if (correta.trim().length < 5) { toast.error("Descreva a solução que resolveu o problema."); return; }
+    setBusy(true);
+    try {
+      await votar(await garantirId(), false, evento, correta.trim());
+      await salvarSolucao({ evento, solucao: correta.trim(), autor: nome.trim() || null, origem: "analista" });
+      toast.success("Nova solução adicionada à base de conhecimento.");
+      setFalhou(false); setCorreta(""); carregar(); onSaved();
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+  }
+
+  const s = info?.stats;
+  const total = s ? s.positivos + s.negativos : 0;
+  const taxa = s ? taxaSucesso(s.positivos, s.negativos) : null;
+  const tone = taxa === null ? "text-muted-foreground" : taxa >= 75 ? "text-success" : taxa >= 50 ? "text-warning" : "text-destructive";
+  return (
+    <div className="space-y-3 border-t p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className={`font-mono text-xl font-semibold ${tone}`}>{taxa === null ? "—" : `${taxa}%`}</div>
+        <p className="text-xs text-muted-foreground">
+          {info === undefined ? "Consultando histórico de uso…"
+            : !s || total === 0 ? "Solução ainda não avaliada por nenhum analista."
+            : s.positivos_30d > 0 ? `Aplicada com sucesso ${s.positivos_30d} vez(es) nos últimos 30 dias · ${s.positivos}👍 ${s.negativos}👎 no total`
+            : `Testada ${total} vez(es): ${s.positivos} funcionou, ${s.negativos} não funcionou`}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted-foreground">Aplicou a solução deste chamado? Funcionou?</span>
+        <button disabled={busy} onClick={positivo} className="inline-flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 px-3 py-1.5 text-sm text-success hover:bg-success/20 disabled:opacity-50">
+          <ThumbsUp className="size-4" /> Funcionou
+        </button>
+        <button disabled={busy} onClick={() => setFalhou(!falhou)} className="inline-flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/20 disabled:opacity-50">
+          <ThumbsDown className="size-4" /> Não funcionou
+        </button>
+      </div>
+      {falhou && (
+        <div className="rounded-lg border border-destructive/30 bg-background p-3">
+          <p className="text-sm font-medium">Qual foi a solução correta?</p>
+          <textarea value={correta} onChange={(e) => setCorreta(e.target.value)} rows={5} placeholder="Ações realizadas, causa encontrada, validação…"
+            className="mt-2 w-full rounded-lg border bg-surface p-3 text-sm outline-none focus:shadow-glow" />
+          <div className="mt-2 flex flex-wrap gap-2">
+            <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome (opcional)" className="h-9 flex-1 rounded-lg border bg-surface px-3 text-sm outline-none" />
+            <button disabled={busy} onClick={negativo} className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
+              {busy ? "Salvando…" : "Registrar solução"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TicketCard({ c, otrsBase, defaultOpen, feedback, evento, onSaved }: { c: Candidato; otrsBase: string; defaultOpen: boolean; feedback?: boolean; evento: string; onSaved: () => void }) {
   const [open, setOpen] = useState(defaultOpen);
   const artigos = artigosDe(c);
   const resumo = artigos[artigos.length - 1]?.texto.replace(/\s+/g, " ");
@@ -347,6 +423,10 @@ function TicketCard({ c, otrsBase, defaultOpen, evento, onSaved }: { c: Candidat
         </div>
         <ChevronDown className={`size-5 shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
       </button>
+      {feedback && artigos.length > 0 && (
+        <FeedbackTicket c={c} evento={evento} solucao={artigos[artigos.length - 1]!.texto}
+          autor={artigos[artigos.length - 1]!.autor.split(" via ")[0] ?? ""} onSaved={onSaved} />
+      )}
       {open && (
         <div className="space-y-4 border-t p-4">
           <div className="grid gap-3 text-sm sm:grid-cols-3">

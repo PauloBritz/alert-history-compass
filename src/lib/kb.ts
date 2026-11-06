@@ -43,6 +43,26 @@ export async function resolverEvento(id: string, solucao_id: string) {
   if (error) throw error;
 }
 
+export interface StatsSolucao { positivos: number; negativos: number; positivos_30d: number }
+
+/** Busca a solução já salva na base para um chamado do OTRS (ou null). */
+export async function solucaoDoTicket(ticket_numero: string): Promise<{ id: string; stats: StatsSolucao } | null> {
+  const { data } = await supabase.from("kb_solucoes").select("id").eq("ticket_numero", ticket_numero)
+    .order("created_at", { ascending: true }).limit(1).maybeSingle();
+  if (!data) return null;
+  const { data: votos } = await supabase.from("kb_votos").select("positivo, created_at").eq("solucao_id", data.id);
+  const limite = Date.now() - 30 * 864e5;
+  const v = votos ?? [];
+  return {
+    id: data.id,
+    stats: {
+      positivos: v.filter((x) => x.positivo).length,
+      negativos: v.filter((x) => !x.positivo).length,
+      positivos_30d: v.filter((x) => x.positivo && new Date(x.created_at).getTime() >= limite).length,
+    },
+  };
+}
+
 export async function votar(solucao_id: string, positivo: boolean, evento: string, comentario?: string) {
   const { error } = await supabase.from("kb_votos").insert({ solucao_id, positivo, evento, comentario: comentario ?? null });
   if (error) throw error;
