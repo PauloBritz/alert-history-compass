@@ -1,4 +1,5 @@
 # Roadmap
+- [x] Ampliar recomendação sem histórico para validar soluções da KB e destacar Cadastrar solução em verde
 - [x] Base de conhecimento com votos (polegar) e taxa de sucesso
 - [x] Botões Funcionou/Não funcionou em todas as soluções
 - [x] Remover seção "Soluções aplicadas anteriormente" do final
