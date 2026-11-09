@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { BookOpenCheck, ChevronDown, Loader2, Plus, ThumbsDown, ThumbsUp, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { buscarKb, registrarEventoNovo, resolverEvento, salvarSolucao, taxaSucesso, votar, type KbSolucao } from "@/lib/kb";
 
 export function KbPanel({ evento, refreshKey, semHistorico }: { evento: string; refreshKey: number; semHistorico: boolean }) {
@@ -22,9 +23,9 @@ export function KbPanel({ evento, refreshKey, semHistorico }: { evento: string; 
           <div className="font-mono text-xs uppercase tracking-widest text-primary">Base de conhecimento</div>
           <h2 className="text-lg font-semibold">Soluções recomendadas para este evento</h2>
         </div>
-        <button onClick={() => setNovo(!novo)} className="ml-auto inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm hover:bg-accent">
+        <Button onClick={() => setNovo(!novo)} aria-expanded={novo} className="ml-auto rounded-xl px-6 shadow-glow">
           <Plus className="size-4" /> Cadastrar solução
-        </button>
+        </Button>
       </div>
 
       {novo && <NovaSolucao evento={evento} onSaved={() => { setNovo(false); carregar(); }} />}

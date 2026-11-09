@@ -228,7 +228,7 @@ function Decision({ data }: { data: Resultado }) {
       <div>
         <div className={`font-mono text-xs uppercase tracking-widest ${d.tone}`}>Recomendação</div>
         <div className="text-xl font-semibold">{d.titulo}</div>
-        <p className="mt-1 text-sm text-muted-foreground">{data.decisao === "NOVO" ? "Nenhum chamado parecido no período. O evento foi registrado na base — informe a solução aplicada ao final do atendimento." : data.mensagem}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{data.decisao === "NOVO" ? "Nenhum chamado parecido no período. Valide se alguma das soluções recomendadas abaixo pode solucionar este evento. Caso nenhuma seja útil, clique em ‘+ Cadastrar solução’ e registre a solução aplicada ao final do atendimento." : data.mensagem}</p>
       </div>
     </section>
   );
