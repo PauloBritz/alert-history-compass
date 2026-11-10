@@ -1,0 +1,22 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: eventlens
+      POSTGRES_USER: eventlens
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-troque-esta-senha}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports: ["127.0.0.1:5432:5432"]
+  app:
+    build: { context: .., dockerfile: deploy/Dockerfile }
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://eventlens:${DB_PASSWORD:-troque-esta-senha}@db:5432/eventlens
+      PORT: 3000
+    ports: ["3000:3000"]
+    depends_on: [db]
+volumes:
+  pgdata:

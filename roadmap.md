@@ -5,4 +5,5 @@
 - [x] Remover seção "Soluções aplicadas anteriormente" do final
 - [x] Evento sem similares: registrar evento e pedir a solução (sem orientar abrir chamado)
 - [x] Preparar base para busca vetorial (IA/RAG futura)
+- [x] Substituir Supabase por PostgreSQL local (kit em deploy/)
 - [ ] Gerar embeddings e busca por IA (RAG) — futuro
