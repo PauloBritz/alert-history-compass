@@ -1,19 +1,14 @@
-// Camada de dados da KB. Usa PostgreSQL direto quando DATABASE_URL está definido
-// (ambiente local/VM). Sem DATABASE_URL, cai no banco do preview (Lovable Cloud).
+// Camada de dados da KB: somente PostgreSQL local (variável DATABASE_URL).
 import postgres from "postgres";
 
 type Sql = ReturnType<typeof postgres>;
 type Row = { id: string };
 let _sql: Sql | undefined;
-function pg(): Sql | null {
+function pg(): Sql {
   const url = process.env['DATABASE_URL'];
-  if (!url) return null;
+  if (!url) throw new Error("DATABASE_URL não configurada. Aponte para o seu PostgreSQL local.");
   if (!_sql) _sql = postgres(url, { max: 5, idle_timeout: 20 });
   return _sql;
-}
-async function cloud() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
 }
 
 export async function dbBuscar(texto: string) {
