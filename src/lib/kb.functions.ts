@@ -9,7 +9,7 @@ export const fnBuscar = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { dbBuscar } = await import("./kb.db.server");
     const rows = await dbBuscar(data.texto);
-    return JSON.parse(JSON.stringify(rows)) as Record<string, unknown>[];
+    return JSON.stringify(rows);
   });
 
 export const fnSalvar = createServerFn({ method: "POST" })

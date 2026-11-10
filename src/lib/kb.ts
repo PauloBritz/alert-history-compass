@@ -13,7 +13,7 @@ export function taxaSucesso(pos: number, neg: number): number | null {
 }
 
 export async function buscarKb(texto: string): Promise<KbSolucao[]> {
-  const data = await fnBuscar({ data: { texto } });
+  const data = JSON.parse(await fnBuscar({ data: { texto } })) as Record<string, unknown>[];
   return data.map((r) => ({ ...r, similaridade: Number(r.similaridade), positivos: Number(r.positivos), negativos: Number(r.negativos), positivos_30d: Number(r.positivos_30d) })) as unknown as KbSolucao[];
 }
 
