@@ -6,6 +6,7 @@
     "vitest.config.ts",
     "eslint.config.js"
   ],
+  "exclude": ["src/integrations/supabase/**"],
   "compilerOptions": {
     "target": "ES2022",
     "jsx": "react-jsx",
