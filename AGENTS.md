@@ -10,4 +10,4 @@
 <!-- LOVABLE:END -->
 
 ## Data layer
-- KB data is accessed only via server functions in src/lib/kb.functions.ts → src/lib/kb.db.server.ts, using the `postgres` driver when DATABASE_URL is set (self-hosted VM) and falling back to Lovable Cloud only for the hosted preview. Why: the app must run fully local with plain PostgreSQL; deploy/ holds init.sql, Docker and the local guide.
+- KB data is accessed only via server functions in src/lib/kb.functions.ts → src/lib/kb.db.server.ts, using only the `postgres` driver via DATABASE_URL (no Supabase). Why: the app must run fully local with plain PostgreSQL; deploy/ holds init.sql, Docker and the local guide.
