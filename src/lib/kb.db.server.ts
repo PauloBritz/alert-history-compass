@@ -6,7 +6,7 @@ type Sql = ReturnType<typeof postgres>;
 type Row = { id: string };
 let _sql: Sql | undefined;
 function pg(): Sql | null {
-  const url = process.env.DATABASE_URL;
+  const url = process.env['DATABASE_URL'];
   if (!url) return null;
   if (!_sql) _sql = postgres(url, { max: 5, idle_timeout: 20 });
   return _sql;
