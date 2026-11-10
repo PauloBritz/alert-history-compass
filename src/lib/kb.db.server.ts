@@ -12,24 +12,14 @@ function pg(): Sql {
 }
 
 export async function dbBuscar(texto: string) {
-  const sql = pg();
-  if (sql) return sql`select * from kb_buscar(${texto}, 10)`;
-  const { data, error } = await (await cloud()).rpc("kb_buscar", { _texto: texto, _limite: 10 });
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  return pg()`select * from kb_buscar(${texto}, 10)`;
 }
 
 export async function dbSalvarSolucao(s: { evento: string; solucao: string; ticket_numero: string | null; autor: string | null; origem: string }) {
-  const sql = pg();
   try {
-    if (sql) {
-      const [r] = await sql<Row[]>`insert into kb_solucoes (evento, solucao, ticket_numero, autor, origem)
-        values (${s.evento}, ${s.solucao}, ${s.ticket_numero}, ${s.autor}, ${s.origem}) returning id`;
-      return r!.id;
-    }
-    const { data, error } = await (await cloud()).from("kb_solucoes").insert(s).select("id").single();
-    if (error) throw error;
-    return data.id;
+    const [r] = await pg()<Row[]>`insert into kb_solucoes (evento, solucao, ticket_numero, autor, origem)
+      values (${s.evento}, ${s.solucao}, ${s.ticket_numero}, ${s.autor}, ${s.origem}) returning id`;
+    return r!.id;
   } catch (e) {
     if ((e as { code?: string }).code === "23505") throw new Error("Esta solução já está na base para este evento.");
     throw new Error((e as Error).message);
@@ -38,50 +28,24 @@ export async function dbSalvarSolucao(s: { evento: string; solucao: string; tick
 
 export async function dbRegistrarEvento(evento: string) {
   const sql = pg();
-  if (sql) {
-    const [ex] = await sql<Row[]>`select id from kb_eventos where lower(evento) = lower(${evento}) and status = 'aguardando_solucao' limit 1`;
-    if (ex) return ex.id as string;
-    const [r] = await sql<Row[]>`insert into kb_eventos (evento) values (${evento}) returning id`;
-    return r!.id;
-  }
-  const db = await cloud();
-  const { data: ex } = await db.from("kb_eventos").select("id").ilike("evento", evento).eq("status", "aguardando_solucao").limit(1).maybeSingle();
+  const [ex] = await sql<Row[]>`select id from kb_eventos where lower(evento) = lower(${evento}) and status = 'aguardando_solucao' limit 1`;
   if (ex) return ex.id;
-  const { data, error } = await db.from("kb_eventos").insert({ evento }).select("id").single();
-  if (error) throw new Error(error.message);
-  return data.id;
+  const [r] = await sql<Row[]>`insert into kb_eventos (evento) values (${evento}) returning id`;
+  return r!.id;
 }
 
 export async function dbResolverEvento(id: string, solucao_id: string) {
-  const sql = pg();
-  if (sql) {
-    await sql`update kb_eventos set status = 'resolvido', solucao_id = ${solucao_id}, resolvido_em = now() where id = ${id}`;
-    return;
-  }
-  const { error } = await (await cloud()).from("kb_eventos")
-    .update({ status: "resolvido", solucao_id, resolvido_em: new Date().toISOString() }).eq("id", id);
-  if (error) throw new Error(error.message);
+  await pg()`update kb_eventos set status = 'resolvido', solucao_id = ${solucao_id}, resolvido_em = now() where id = ${id}`;
 }
 
 export async function dbSolucaoDoTicket(ticket: string) {
   const sql = pg();
-  let id: string | undefined;
-  let votos: { positivo: boolean; created_at: string | Date }[] = [];
-  if (sql) {
-    const [s] = await sql<Row[]>`select id from kb_solucoes where ticket_numero = ${ticket} order by created_at limit 1`;
-    if (!s) return null;
-    id = s.id;
-    votos = (await sql`select positivo, created_at from kb_votos where solucao_id = ${s.id}`) as unknown as typeof votos;
-  } else {
-    const db = await cloud();
-    const { data } = await db.from("kb_solucoes").select("id").eq("ticket_numero", ticket).order("created_at", { ascending: true }).limit(1).maybeSingle();
-    if (!data) return null;
-    id = data.id;
-    votos = (await db.from("kb_votos").select("positivo, created_at").eq("solucao_id", data.id)).data ?? [];
-  }
+  const [s] = await sql<Row[]>`select id from kb_solucoes where ticket_numero = ${ticket} order by created_at limit 1`;
+  if (!s) return null;
+  const votos = (await sql`select positivo, created_at from kb_votos where solucao_id = ${s.id}`) as unknown as { positivo: boolean; created_at: string | Date }[];
   const limite = Date.now() - 30 * 864e5;
   return {
-    id: id!,
+    id: s.id,
     stats: {
       positivos: votos.filter((x) => x.positivo).length,
       negativos: votos.filter((x) => !x.positivo).length,
@@ -91,11 +55,5 @@ export async function dbSolucaoDoTicket(ticket: string) {
 }
 
 export async function dbVotar(solucao_id: string, positivo: boolean, evento: string, comentario: string | null) {
-  const sql = pg();
-  if (sql) {
-    await sql`insert into kb_votos (solucao_id, positivo, evento, comentario) values (${solucao_id}, ${positivo}, ${evento}, ${comentario})`;
-    return;
-  }
-  const { error } = await (await cloud()).from("kb_votos").insert({ solucao_id, positivo, evento, comentario });
-  if (error) throw new Error(error.message);
+  await pg()`insert into kb_votos (solucao_id, positivo, evento, comentario) values (${solucao_id}, ${positivo}, ${evento}, ${comentario})`;
 }
