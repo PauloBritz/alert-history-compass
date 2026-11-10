@@ -3,6 +3,7 @@
 import postgres from "postgres";
 
 type Sql = ReturnType<typeof postgres>;
+type Row = { id: string };
 let _sql: Sql | undefined;
 function pg(): Sql | null {
   const url = process.env.DATABASE_URL;
@@ -27,9 +28,9 @@ export async function dbSalvarSolucao(s: { evento: string; solucao: string; tick
   const sql = pg();
   try {
     if (sql) {
-      const [r] = await sql`insert into kb_solucoes (evento, solucao, ticket_numero, autor, origem)
+      const [r] = await sql<Row[]>`insert into kb_solucoes (evento, solucao, ticket_numero, autor, origem)
         values (${s.evento}, ${s.solucao}, ${s.ticket_numero}, ${s.autor}, ${s.origem}) returning id`;
-      return r.id as string;
+      return r!.id;
     }
     const { data, error } = await (await cloud()).from("kb_solucoes").insert(s).select("id").single();
     if (error) throw error;
@@ -43,10 +44,10 @@ export async function dbSalvarSolucao(s: { evento: string; solucao: string; tick
 export async function dbRegistrarEvento(evento: string) {
   const sql = pg();
   if (sql) {
-    const [ex] = await sql`select id from kb_eventos where lower(evento) = lower(${evento}) and status = 'aguardando_solucao' limit 1`;
+    const [ex] = await sql<Row[]>`select id from kb_eventos where lower(evento) = lower(${evento}) and status = 'aguardando_solucao' limit 1`;
     if (ex) return ex.id as string;
-    const [r] = await sql`insert into kb_eventos (evento) values (${evento}) returning id`;
-    return r.id as string;
+    const [r] = await sql<Row[]>`insert into kb_eventos (evento) values (${evento}) returning id`;
+    return r!.id;
   }
   const db = await cloud();
   const { data: ex } = await db.from("kb_eventos").select("id").ilike("evento", evento).eq("status", "aguardando_solucao").limit(1).maybeSingle();
@@ -72,10 +73,10 @@ export async function dbSolucaoDoTicket(ticket: string) {
   let id: string | undefined;
   let votos: { positivo: boolean; created_at: string | Date }[] = [];
   if (sql) {
-    const [s] = await sql`select id from kb_solucoes where ticket_numero = ${ticket} order by created_at limit 1`;
+    const [s] = await sql<Row[]>`select id from kb_solucoes where ticket_numero = ${ticket} order by created_at limit 1`;
     if (!s) return null;
     id = s.id;
-    votos = (await sql`select positivo, created_at from kb_votos where solucao_id = ${id}`) as unknown as typeof votos;
+    votos = (await sql`select positivo, created_at from kb_votos where solucao_id = ${s.id}`) as unknown as typeof votos;
   } else {
     const db = await cloud();
     const { data } = await db.from("kb_solucoes").select("id").eq("ticket_numero", ticket).order("created_at", { ascending: true }).limit(1).maybeSingle();
