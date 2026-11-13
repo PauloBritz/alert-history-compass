@@ -70,8 +70,7 @@ function Index() {
         catch (e) { setOtrsError((e as Error).message); }
       }
       toast.success("Consulta à base concluída");
-    } catch (e) { toast.error((e as Error).message); }
-    } finally {
+    } catch (e) { toast.error((e as Error).message); } finally {
       setLoading(false);
     }
   }
