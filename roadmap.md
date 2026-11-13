@@ -6,7 +6,9 @@
 - [x] Evento sem similares: registrar evento e pedir a solução (sem orientar abrir chamado)
 - [x] Preparar base para busca vetorial (IA/RAG futura)
 - [x] Substituir Supabase por PostgreSQL local (kit em deploy/)
-- [ ] Evoluir KB: tipos, ocorrências, fontes, avaliações específicas e histórico
-- [ ] Backend Python local, autenticação, transações e consulta complementar OTRS
-- [ ] Integrar interface via HTTP preservando recursos e identidade visual
-- [ ] Testar regras, fluxo real e exportar ZIP para staging
+- [x] Evoluir KB: tipos, ocorrências, fontes, avaliações específicas e histórico
+- [x] Backend Python local, autenticação, transações e conector complementar OTRS
+- [x] Integrar interface via HTTP preservando recursos e identidade visual
+- [x] Testar regras e fluxo real; exportar ZIP para revisão de staging
+- [ ] Validar motor OTRS em produção — depende do script oficial e acesso à rede OTRS
+- [ ] Gerar schema/snapshots Drizzle das entidades v2 — gestão SQL incremental Python entregue, geração ORM indisponível neste ambiente
