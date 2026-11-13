@@ -116,6 +116,7 @@ class Classification(BaseModel):
 @app.put('/occurrences/{oid}/classification')
 def correction(oid: UUID,data: Classification,u=Depends(user)):
     with connection() as c:
+        c.execute('SELECT id FROM el_occurrences WHERE id=%s FOR UPDATE',(oid,))
         o=get_occurrence(c,oid)
         tid=c.execute("INSERT INTO el_types(name,key,origin) VALUES(%s,%s,'manual') ON CONFLICT(key) DO UPDATE SET key=excluded.key RETURNING id",(data.name,normalized(data.name))).fetchone()['id']
         c.execute('UPDATE el_occurrences SET type_id=%s WHERE id=%s',(tid,oid))
@@ -217,7 +218,7 @@ def otrs(oid: UUID,u=Depends(user)):
         if p.returncode: raise ValueError('motor failed')
         raw=json.loads(p.stdout[p.stdout.index('{'):])
         if not isinstance(raw.get('candidatos'),list): raise ValueError('invalid contract')
-    except (ValueError,subprocess.TimeoutExpired): raise HTTPException(502,'Não foi possível obter os resultados do OTRS')
+    except (ValueError,OSError,subprocess.TimeoutExpired): raise HTTPException(502,'Não foi possível obter os resultados do OTRS')
     with connection() as c: audit(c,oid,u,'otrs_consulted',{'result':raw})
     return raw
 

@@ -66,7 +66,7 @@ function Index() {
       setKnowledge(k);
       setData({ ...data, evento: o.original_title, candidatos: [], chamados_analisados: 0, chamados_encontrados: 0, resumo: { mesmo_evento: 0, relacionados: 0, ainda_abertos: 0 }, decisao: "NOVO", mensagem: "" });
       if (k.otrs_required) {
-        try { setData(await api<Resultado>(`/occurrences/${o.id}/otrs`, "POST")); }
+        try { const result = await api<Resultado>(`/occurrences/${o.id}/otrs`, "POST"); setData({ ...result, evento: o.original_title }); }
         catch (e) { setOtrsError((e as Error).message); }
       }
       toast.success("Consulta à base concluída");
@@ -162,7 +162,7 @@ function Index() {
         {knowledge && <KnowledgeWorkspace initial={knowledge} onOccurrence={setOccurrence} refreshKey={kbKey} />}
         {otrsError && <p className="mt-4 text-sm text-warning">{otrsError}</p>}
         {knowledge && <p className="mt-3 text-sm text-muted-foreground">{knowledge.otrs_required ? "Valide as soluções recomendadas e os procedimentos históricos. Caso nenhuma seja útil, cadastre a solução aplicada." : "Soluções da KB atendem aos critérios de confiança configurados."}</p>}
-        {data.evento && <Decision data={data} />}
+        {data.evento && !otrsError && data.candidatos.length > 0 && <Decision data={data} />}
         {data.evento && <>
 
         {/* KPIs */}
