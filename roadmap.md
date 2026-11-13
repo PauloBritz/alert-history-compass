@@ -6,4 +6,7 @@
 - [x] Evento sem similares: registrar evento e pedir a solução (sem orientar abrir chamado)
 - [x] Preparar base para busca vetorial (IA/RAG futura)
 - [x] Substituir Supabase por PostgreSQL local (kit em deploy/)
-- [ ] Gerar embeddings e busca por IA (RAG) — futuro
+- [ ] Evoluir KB: tipos, ocorrências, fontes, avaliações específicas e histórico
+- [ ] Backend Python local, autenticação, transações e consulta complementar OTRS
+- [ ] Integrar interface via HTTP preservando recursos e identidade visual
+- [ ] Testar regras, fluxo real e exportar ZIP para staging
