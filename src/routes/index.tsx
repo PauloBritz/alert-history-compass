@@ -7,8 +7,10 @@ import {
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { DEMOS, artigosDe, parseResultado, type Candidato, type Decisao, type Resultado } from "@/lib/otrs";
-import { KbPanel } from "@/components/KbPanel";
-import { salvarSolucao, solucaoDoTicket, taxaSucesso, votar, type StatsSolucao } from "@/lib/kb";
+import { KnowledgeWorkspace, LocalLogin, SolutionRating, AdminSettings } from "@/components/KnowledgeWorkspace";
+import { api, type Analyst, type Knowledge, type Occurrence, type Solution } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -34,8 +36,12 @@ const DECISAO: Record<Decisao, { titulo: string; icon: typeof Repeat; tone: stri
 };
 
 function Index() {
-  const [data, setData] = useState<Resultado>(DEMOS[0]!.data);
-  const [texto, setTexto] = useState(DEMOS[0]!.data.evento);
+  const [data, setData] = useState<Resultado>({ evento: "", candidatos: [], palavras: [], pesos: {}, host: null, ips: [], categorias: [], periodo: {}, buscas_realizadas: [], chamados_encontrados: 0, chamados_analisados: 0, resumo: { mesmo_evento: 0, relacionados: 0, ainda_abertos: 0 }, decisao: "NOVO", mensagem: "" });
+  const [texto, setTexto] = useState("");
+  const [analyst, setAnalyst] = useState<Analyst | null>(null);
+  const [knowledge, setKnowledge] = useState<Knowledge | null>(null);
+  const [occurrence, setOccurrence] = useState<Occurrence | null>(null);
+  const [otrsError, setOtrsError] = useState("");
   const [apiUrl, setApiUrl] = useState("");
   const [otrsBase, setOtrsBase] = useState(OTRS_BASE_DEFAULT);
   const [panel, setPanel] = useState<null | "json" | "config">(null);
@@ -46,31 +52,36 @@ function Index() {
   useEffect(() => {
     setApiUrl(localStorage.getItem("eventlens.api") ?? "");
     setOtrsBase(localStorage.getItem("eventlens.otrs") ?? OTRS_BASE_DEFAULT);
+    void api<Analyst>("/auth/me").then(setAnalyst).catch(() => {});
   }, []);
 
   async function analisar() {
     if (!texto.trim()) return;
-    if (!apiUrl) {
-      setPanel("config");
-      toast.info("Configure o endereço da API do script para consultar ao vivo, ou importe o JSON.");
-      return;
-    }
-    setLoading(true);
+    if (!analyst) { toast.info("Entre na sua conta antes de analisar."); return; }
+    setLoading(true); setOtrsError(""); setKnowledge(null); setOccurrence(null);
     try {
-      const r = await fetch(`${apiUrl.replace(/\/$/, "")}/evento?texto=${encodeURIComponent(texto)}`);
-      if (!r.ok) throw new Error(`API respondeu ${r.status}`);
-      setData(parseResultado(await r.text()));
-      toast.success("Análise concluída");
-    } catch (e) {
-      toast.error(`Não foi possível consultar: ${(e as Error).message}`);
+      const o = await api<Occurrence>("/occurrences", "POST", { title: texto });
+      setOccurrence(o);
+      const k = await api<Knowledge>(`/occurrences/${o.id}/recommendations`);
+      setKnowledge(k);
+      setData({ ...data, evento: o.original_title, candidatos: [], chamados_analisados: 0, chamados_encontrados: 0, resumo: { mesmo_evento: 0, relacionados: 0, ainda_abertos: 0 }, decisao: "NOVO", mensagem: "" });
+      if (k.otrs_required) {
+        try { setData(await api<Resultado>(`/occurrences/${o.id}/otrs`, "POST")); }
+        catch (e) { setOtrsError((e as Error).message); }
+      }
+      toast.success("Consulta à base concluída");
+    } catch (e) { toast.error((e as Error).message); }
     } finally {
       setLoading(false);
     }
   }
 
-  function importar() {
+  async function importar() {
     try {
       const d = parseResultado(raw);
+      if (!analyst) throw new Error("Entre na sua conta antes de importar.");
+      const o = await api<Occurrence>("/occurrences", "POST", { title: d.evento });
+      setOccurrence(o); setKnowledge(await api<Knowledge>(`/occurrences/${o.id}/recommendations`));
       setData(d); setTexto(d.evento); setPanel(null); setRaw("");
       toast.success("JSON importado");
     } catch (e) { toast.error((e as Error).message); }
@@ -96,8 +107,9 @@ function Index() {
           <div className="ml-auto flex items-center gap-2">
             <span className="hidden items-center gap-2 rounded-full border px-3 py-1 font-mono text-xs text-muted-foreground sm:flex">
               <span className={`size-2 rounded-full ${apiUrl ? "bg-success pulse-dot text-success" : "bg-muted-foreground"}`} />
-              {apiUrl ? "API conectada" : "modo offline"}
+              {analyst ? analyst.username : "Não autenticado"}
             </span>
+            {analyst && <Button variant="ghost" onClick={async () => { await api("/auth/logout", "POST"); setAnalyst(null); setKnowledge(null); setOccurrence(null); }}>Sair</Button>}
             <HeaderBtn onClick={() => setPanel(panel === "json" ? null : "json")} icon={FileJson}>Importar JSON</HeaderBtn>
             <HeaderBtn onClick={() => setPanel(panel === "config" ? null : "config")} icon={Settings2}>Config</HeaderBtn>
           </div>
@@ -116,19 +128,11 @@ function Index() {
                 placeholder='Cole o evento do Zabbix, ex.: "Badesul - Host SRV01 is Down"'
                 className="h-12 flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground" />
             </div>
-            <button disabled={loading} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary px-6 font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60">
+            <Button disabled={loading} type="submit" className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary px-6 font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60">
               {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} Analisar
-            </button>
+            </Button>
           </form>
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-muted-foreground">Exemplos:</span>
-            {DEMOS.map((d) => (
-              <button key={d.label} onClick={() => { setData(d.data); setTexto(d.data.evento); }}
-                className={`rounded-full border px-3 py-1 font-mono transition hover:border-primary hover:text-primary ${data === d.data ? "border-primary text-primary" : "text-muted-foreground"}`}>
-                {d.label}{!d.real && " · fictício"}
-              </button>
-            ))}
-          </div>
+
 
           {panel === "json" && (
             <div className="mt-5 rounded-xl border bg-background p-4">
@@ -146,20 +150,21 @@ function Index() {
           )}
           {panel === "config" && (
             <div className="mt-5 grid gap-4 rounded-xl border bg-background p-4 md:grid-cols-2">
-              <Field label="URL da API do script (ex.: http://localhost:8000)" value={apiUrl}
+              <Field label="URL do backend Python" value={apiUrl}
                 onChange={(v) => { setApiUrl(v); localStorage.setItem("eventlens.api", v); }} />
               <Field label="Endereço do OTRS (links dos chamados)" value={otrsBase}
                 onChange={(v) => { setOtrsBase(v); localStorage.setItem("eventlens.otrs", v); }} />
-              <p className="text-xs text-muted-foreground md:col-span-2">
-                A interface chama <code className="font-mono text-primary">GET {"{URL}"}/evento?texto=...</code> e espera o mesmo JSON do <code className="font-mono">--json</code>.
-              </p>
+{analyst?.role === "admin" && <div className="md:col-span-2"><AdminSettings /></div>}
             </div>
           )}
         </section>
 
-        <Decision data={data} />
-
-        <KbPanel evento={data.evento} refreshKey={kbKey} semHistorico={data.candidatos.length === 0} />
+        {!analyst && <LocalLogin onLogin={setAnalyst} />}
+        {knowledge && <KnowledgeWorkspace initial={knowledge} onOccurrence={setOccurrence} refreshKey={kbKey} />}
+        {otrsError && <p className="mt-4 text-sm text-warning">{otrsError}</p>}
+        {knowledge && <p className="mt-3 text-sm text-muted-foreground">{knowledge.otrs_required ? "Valide as soluções recomendadas e os procedimentos históricos. Caso nenhuma seja útil, cadastre a solução aplicada." : "Soluções da KB atendem aos critérios de confiança configurados."}</p>}
+        {data.evento && <Decision data={data} />}
+        {data.evento && <>
 
         {/* KPIs */}
         <section className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -174,7 +179,7 @@ function Index() {
 
           <section>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold">Chamados parecidos <span className="font-mono text-sm text-muted-foreground">({candidatos.length})</span></h2>
+              <h2 className="text-lg font-semibold">Procedimentos históricos do OTRS <span className="font-mono text-sm text-muted-foreground">({candidatos.length})</span></h2>
               <div className="flex rounded-lg border p-1 text-xs">
                 {(["todos", "duplicados", "abertos"] as const).map((f) => (
                   <button key={f} onClick={() => setFiltro(f)}
@@ -190,12 +195,13 @@ function Index() {
               </div>
             ) : (
               <div className="space-y-3">
-                {candidatos.map((c, i) => <TicketCard key={c.ticket_id} c={c} otrsBase={otrsBase} defaultOpen={i === 0} feedback={i === 0} evento={data.evento} onSaved={() => setKbKey((k) => k + 1)} />)}
+                {candidatos.map((c, i) => <TicketCard key={c.ticket_id} c={c} otrsBase={otrsBase} defaultOpen={i === 0} feedback={true} occurrenceId={occurrence?.id ?? null} evento={data.evento} onSaved={() => setKbKey((k) => k + 1)} />)}
               </div>
             )}
 
           </section>
         </div>
+        </>}
       </main>
     </div>
   );
@@ -306,89 +312,27 @@ function ScoreRing({ score, tone }: { score: number; tone: string }) {
   );
 }
 
-function FeedbackTicket({ c, evento, solucao, autor, onSaved }: { c: Candidato; evento: string; solucao: string; autor: string; onSaved: () => void }) {
-  const [info, setInfo] = useState<{ id: string; stats: StatsSolucao } | null | undefined>(undefined);
-  const [falhou, setFalhou] = useState(false);
-  const [correta, setCorreta] = useState("");
-  const [nome, setNome] = useState("");
-  const [busy, setBusy] = useState(false);
-  const carregar = useCallback(() => { solucaoDoTicket(c.numero).then(setInfo).catch(() => setInfo(null)); }, [c.numero]);
-  useEffect(() => { carregar(); }, [carregar]);
-
-  async function garantirId() {
-    if (info) return info.id;
+function FeedbackTicket({ c, oid, solucao, autor, articleId, sourceDate, onSaved }: { c: Candidato; oid: string; solucao: string; autor: string; articleId?: string; sourceDate: string; onSaved: () => void }) {
+  const [solution, setSolution] = useState<Solution | null>(null);
+  async function save() {
     try {
-      return await salvarSolucao({ evento: c.titulo.replace(/\s+/g, " ").trim() || evento, solucao, ticket_numero: c.numero, autor, origem: "otrs" });
-    } catch {
-      const r = await solucaoDoTicket(c.numero);
-      if (!r) throw new Error("Não foi possível registrar a solução na base.");
-      return r.id;
-    }
+      const r = await api<{id: string}>(`/occurrences/${oid}/solutions`, "POST", { procedure: solucao, source: { ticket_number: c.numero, article_id: articleId ?? null, ticket_title: c.titulo, author: autor, source_date: sourceDate, content: solucao, metadata: c } });
+      const k = await api<Knowledge>(`/occurrences/${oid}/recommendations`);
+      setSolution(k.solutions.find(s => s.id === r.id) ?? null); onSaved();
+    } catch (e) { toast.error((e as Error).message); }
   }
-  async function positivo() {
-    setBusy(true);
-    try { await votar(await garantirId(), true, evento); toast.success("Obrigado! A solução ganhou credibilidade."); carregar(); onSaved(); }
-    catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
-  }
-  async function negativo() {
-    if (correta.trim().length < 5) { toast.error("Descreva a solução que resolveu o problema."); return; }
-    setBusy(true);
-    try {
-      await votar(await garantirId(), false, evento, correta.trim());
-      await salvarSolucao({ evento, solucao: correta.trim(), autor: nome.trim() || null, origem: "analista" });
-      toast.success("Nova solução adicionada à base de conhecimento.");
-      setFalhou(false); setCorreta(""); carregar(); onSaved();
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
-  }
-
-  const s = info?.stats;
-  const total = s ? s.positivos + s.negativos : 0;
-  const taxa = s ? taxaSucesso(s.positivos, s.negativos) : null;
-  const tone = taxa === null ? "text-muted-foreground" : taxa >= 75 ? "text-success" : taxa >= 50 ? "text-warning" : "text-destructive";
-  return (
-    <div className="space-y-3 border-t p-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className={`font-mono text-xl font-semibold ${tone}`}>{taxa === null ? "—" : `${taxa}%`}</div>
-        <p className="text-xs text-muted-foreground">
-          {info === undefined ? "Consultando histórico de uso…"
-            : !s || total === 0 ? "Solução ainda não avaliada por nenhum analista."
-            : s.positivos_30d > 0 ? `Aplicada com sucesso ${s.positivos_30d} vez(es) nos últimos 30 dias · ${s.positivos}👍 ${s.negativos}👎 no total`
-            : `Testada ${total} vez(es): ${s.positivos} funcionou, ${s.negativos} não funcionou`}
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-muted-foreground">Aplicou a solução deste chamado? Funcionou?</span>
-        <button disabled={busy} onClick={positivo} className="inline-flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 px-3 py-1.5 text-sm text-success hover:bg-success/20 disabled:opacity-50">
-          <ThumbsUp className="size-4" /> Funcionou
-        </button>
-        <button disabled={busy} onClick={() => setFalhou(!falhou)} className="inline-flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/20 disabled:opacity-50">
-          <ThumbsDown className="size-4" /> Não funcionou
-        </button>
-      </div>
-      {falhou && (
-        <div className="rounded-lg border border-destructive/30 bg-background p-3">
-          <p className="text-sm font-medium">Qual foi a solução correta?</p>
-          <textarea value={correta} onChange={(e) => setCorreta(e.target.value)} rows={5} placeholder="Ações realizadas, causa encontrada, validação…"
-            className="mt-2 w-full rounded-lg border bg-surface p-3 text-sm outline-none focus:shadow-glow" />
-          <div className="mt-2 flex flex-wrap gap-2">
-            <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome (opcional)" className="h-9 flex-1 rounded-lg border bg-surface px-3 text-sm outline-none" />
-            <button disabled={busy} onClick={negativo} className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
-              {busy ? "Salvando…" : "Registrar solução"}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return solution ? <SolutionRating oid={oid} solution={solution} onSaved={async () => { const k = await api<Knowledge>(`/occurrences/${oid}/recommendations`); setSolution(k.solutions.find(s => s.id === solution.id) ?? null); onSaved(); }} /> : <div className="border-t p-4"><p className="mb-2 text-xs text-muted-foreground">AINDA NÃO VALIDADA para o tipo de evento atual</p><Button variant="outline" onClick={save}><PlusIcon /> Salvar na KB e avaliar</Button></div>;
 }
+function PlusIcon() { return <Wrench className="size-4" />; }
 
-function TicketCard({ c, otrsBase, defaultOpen, feedback, evento, onSaved }: { c: Candidato; otrsBase: string; defaultOpen: boolean; feedback?: boolean; evento: string; onSaved: () => void }) {
+function TicketCard({ c, otrsBase, defaultOpen, feedback, occurrenceId, evento, onSaved }: { c: Candidato; otrsBase: string; defaultOpen: boolean; feedback?: boolean; occurrenceId: string | null; evento: string; onSaved: () => void }) {
   const [open, setOpen] = useState(defaultOpen);
   const artigos = artigosDe(c);
   const resumo = artigos[artigos.length - 1]?.texto.replace(/\s+/g, " ");
   async function salvarNaBase(texto: string, autor: string) {
     try {
-      await salvarSolucao({ evento: c.titulo.replace(/\s+/g, " ").trim() || evento, solucao: texto, ticket_numero: c.numero, autor, origem: "otrs" });
+      if (!occurrenceId) throw new Error("Analise o evento antes de salvar.");
+      await api(`/occurrences/${occurrenceId}/solutions`, "POST", { procedure: texto, source: { ticket_number: c.numero, ticket_title: c.titulo, author: autor, content: texto, metadata: c } });
       toast.success("Solução salva na base de conhecimento"); onSaved();
     } catch (e) { toast.error((e as Error).message); }
   }
@@ -423,14 +367,13 @@ function TicketCard({ c, otrsBase, defaultOpen, feedback, evento, onSaved }: { c
         </div>
         <ChevronDown className={`size-5 shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
       </button>
-      {feedback && artigos.length > 0 && (
-        <FeedbackTicket c={c} evento={evento} solucao={artigos[artigos.length - 1]!.texto}
-          autor={artigos[artigos.length - 1]!.autor.split(" via ")[0] ?? ""} onSaved={onSaved} />
-      )}
+      {feedback && occurrenceId && artigos.length > 0 && artigos.map((n, i) => <FeedbackTicket key={`${occurrenceId}-${c.numero}-${i}`} c={c} oid={occurrenceId} solucao={n.texto} autor={n.autor} sourceDate={n.criado} {...(n.id ? { articleId: n.id } : {})} onSaved={onSaved} />)}
       {open && (
         <div className="space-y-4 border-t p-4">
           <div className="grid gap-3 text-sm sm:grid-cols-3">
             <Mini label="Estado" value={c.estado} />
+            <Mini label="Fila" value={c.fila || "—"} />
+            <Mini label="Cliente" value={c.cliente || "—"} />
             <Mini label="Encerramento" value={c.tipo_encerramento || "—"} />
             <Mini label="Causa" value={c.causa || "—"} />
           </div>
