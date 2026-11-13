@@ -9,6 +9,7 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('command',choices=['migrate','create-admin']);p.add_argument('--username');args=p.parse_args()
     if args.command=='migrate':
         with connection() as c:
+            c.execute("SELECT pg_advisory_xact_lock(hashtextextended('eventlens_migrations',0))")
             c.execute('CREATE TABLE IF NOT EXISTS el_migrations(name text PRIMARY KEY, applied_at timestamptz DEFAULT now())')
             for f in sorted(Path(__file__).parent.joinpath('sql').glob('*.sql')):
                 if not c.execute('SELECT 1 FROM el_migrations WHERE name=%s',(f.name,)).fetchone():

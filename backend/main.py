@@ -110,6 +110,20 @@ def occurrence(data: Occurrence,u=Depends(user)):
 def types(u=Depends(user)):
     with connection() as c: return c.execute('SELECT * FROM el_types ORDER BY name').fetchall()
 
+@app.get('/legacy/solutions')
+def legacy(u=Depends(user)):
+    with connection() as c:
+        return c.execute('SELECT s.id,s.procedure,s.author,k.evento AS original_event,k.ticket_numero FROM el_solutions s JOIN kb_solucoes k ON k.id=s.legacy_id ORDER BY k.created_at DESC LIMIT 200').fetchall()
+
+@app.post('/occurrences/{oid}/legacy/{sid}')
+def associate_legacy(oid: UUID,sid: UUID,u=Depends(user)):
+    with connection() as c:
+        if not c.execute('SELECT id FROM el_solutions WHERE id=%s AND legacy_id IS NOT NULL',(sid,)).fetchone():
+            raise HTTPException(404,'Solução legada não encontrada')
+        link=get_link(c,oid,sid)
+        audit(c,oid,u,'legacy_associated',{'solution_id':str(sid),'link_id':str(link)})
+    return {'id':sid}
+
 class Classification(BaseModel):
     name: str = Field(min_length=2,max_length=100)
 
