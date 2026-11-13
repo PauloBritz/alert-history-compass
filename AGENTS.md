@@ -10,4 +10,6 @@
 <!-- LOVABLE:END -->
 
 ## Data layer
-- KB data is accessed only via server functions in src/lib/kb.functions.ts → src/lib/kb.db.server.ts, using only the `postgres` driver via DATABASE_URL (no Supabase). Why: the app must run fully local with plain PostgreSQL; deploy/ holds init.sql, Docker and the local guide.
+- Active KB UI accesses the standalone Python API through src/lib/api.ts; only backend/ uses Psycopg and DATABASE_URL. Why: database credentials and business rules must remain in the local Python service.
+- Statistics are aggregated by solution/type link and immutable evaluation classification; legacy votes stay separate. Why: reclassification must not contaminate efficacy statistics.
+- Export preserves the previous local Drizzle baseline; incremental SQL is applied by Python with an execution ledger. Why: this environment cannot generate custom local Drizzle ORM schemas; SQL migrations keep the required single Python data backend.

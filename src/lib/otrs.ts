@@ -4,14 +4,14 @@ export type Decisao = "JA_EXISTE_ABERTO" | "RECORRENCIA" | "REVISAR" | "NOVO";
 
 export interface Nota { criado: string; tipo: string; autor: string; texto: string }
 export interface Candidato {
-  ticket_id: string; numero: string; titulo: string; estado: string; tipo_estado: string;
+  fila?: string; cliente?: string; ticket_id: string; numero: string; titulo: string; estado: string; tipo_estado: string;
   aberto: boolean; criado: string; dono: string; alterado: string; causa: string;
   tipo_encerramento: string; duracao: string; palavras_iguais: string[];
   palavras_parecidas: string[]; palavras_faltando: string[]; cobertura: number;
   score: number; classe: Classe; motivos: string[]; ultimas_notas?: Nota[];
   solucao?: { origem?: string; artigos: Artigo[] };
 }
-export interface Artigo { criado: string; tipo: string; autor: string; assunto?: string; texto: string }
+export interface Artigo { id?: string; criado: string; tipo: string; autor: string; assunto?: string; texto: string }
 
 /** Artigos de solução do candidato (campo novo `solucao.artigos`, com fallback para `ultimas_notas`). */
 export function artigosDe(c: Candidato): Artigo[] {
