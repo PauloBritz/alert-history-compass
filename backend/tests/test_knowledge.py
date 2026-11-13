@@ -118,3 +118,22 @@ def test_legacy_preserved(client):
     with connection() as c:
         assert c.execute('SELECT count(*) AS n FROM kb_solucoes').fetchone()['n']>=1
         assert c.execute('SELECT count(*) AS n FROM kb_votos').fetchone()['n']>=1
+
+def test_legacy_association_no_old_votes(client):
+    with connection() as c:
+        row=c.execute('SELECT * FROM kb_solucoes LIMIT 1').fetchone()
+        c.execute('INSERT INTO el_solutions(id,procedure,legacy_id,origin) VALUES(%s,%s,%s,%s)',(row['id'],row['solucao'],row['id'],'otrs'))
+    oid=occurrence(client)
+    legacy=client.get('/legacy/solutions').json()[0]
+    assert client.post(f"/occurrences/{oid}/legacy/{legacy['id']}").status_code==200
+    result=client.get(f'/occurrences/{oid}/recommendations').json()['solutions'][0]
+    assert result['total']==0
+
+def test_analyst_cannot_change_admin_settings(client):
+    with connection() as c:c.execute("UPDATE el_users SET role='analyst' WHERE username='tester'")
+    assert client.put('/settings/confidence',json={'min_evaluations':2,'min_success':60,'wilson_lower':0.1}).status_code==403
+
+def test_otrs_absence_not_simulated(client,monkeypatch):
+    monkeypatch.delenv('OTRS_SCRIPT',raising=False)
+    oid=occurrence(client)
+    assert client.post(f'/occurrences/{oid}/otrs').status_code==503
