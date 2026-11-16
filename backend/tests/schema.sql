@@ -1,0 +1,18 @@
+-- Standalone disposable test fixture, NOT a migration. No production data.
+CREATE TABLE kb_solucoes(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), evento text, solucao text, ticket_numero text, created_at timestamptz DEFAULT now());
+CREATE TABLE kb_votos(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), solucao_id uuid, positivo boolean);
+INSERT INTO kb_solucoes(evento,solucao,ticket_numero) VALUES('Legacy fixture','Legacy procedure','fixture');
+INSERT INTO kb_votos(positivo) VALUES(true);
+CREATE TABLE el_users(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),username text UNIQUE NOT NULL,password_hash text NOT NULL,role text NOT NULL,active boolean NOT NULL DEFAULT true);
+CREATE TABLE el_sessions(token_hash text PRIMARY KEY,user_id uuid REFERENCES el_users(id),expires_at timestamptz NOT NULL);
+CREATE TABLE el_types(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),name text NOT NULL,key text UNIQUE NOT NULL,description text,origin text NOT NULL,status text DEFAULT 'confirmed',created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());
+CREATE TABLE el_solutions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),procedure text NOT NULL,author text,origin text NOT NULL,status text DEFAULT 'active',legacy_id uuid UNIQUE,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());
+CREATE TABLE el_links(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),solution_id uuid NOT NULL REFERENCES el_solutions(id),type_id uuid NOT NULL REFERENCES el_types(id),scope_key text NOT NULL DEFAULT 'legacy',UNIQUE(solution_id,type_id,scope_key));
+CREATE TABLE el_occurrences(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),original_title text NOT NULL,type_id uuid REFERENCES el_types(id),status text DEFAULT 'pending',applied_solution_id uuid REFERENCES el_solutions(id),external_id text UNIQUE,received_at timestamptz NOT NULL DEFAULT now(),resolved_at timestamptz,created_by uuid REFERENCES el_users(id),identity_key text,context jsonb NOT NULL DEFAULT '{}',scope_key text NOT NULL DEFAULT 'legacy');
+CREATE UNIQUE INDEX el_occurrences_identity ON el_occurrences(identity_key) WHERE identity_key IS NOT NULL;
+CREATE TABLE el_sources(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),solution_id uuid REFERENCES el_solutions(id),source_key text UNIQUE,ticket_number text,article_id text,ticket_title text,author text,source_date text,content text,metadata jsonb DEFAULT '{}');
+CREATE TABLE el_recommendations(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),occurrence_id uuid REFERENCES el_occurrences(id),link_id uuid REFERENCES el_links(id),snapshot jsonb NOT NULL,created_at timestamptz DEFAULT now(),UNIQUE(occurrence_id,link_id));
+CREATE TABLE el_evaluations(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),occurrence_id uuid REFERENCES el_occurrences(id),link_id uuid REFERENCES el_links(id),positive boolean NOT NULL,comment text,user_id uuid REFERENCES el_users(id),attempt_key uuid UNIQUE NOT NULL,created_at timestamptz DEFAULT now(),request_fingerprint text,evaluated_type_name text,corrective_solution_id uuid REFERENCES el_solutions(id));
+CREATE TABLE el_audit(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),occurrence_id uuid REFERENCES el_occurrences(id),user_id uuid REFERENCES el_users(id),action text,details jsonb,created_at timestamptz DEFAULT now());
+CREATE TABLE el_settings(key text PRIMARY KEY,value jsonb NOT NULL);
+CREATE TABLE el_applications(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),occurrence_id uuid NOT NULL REFERENCES el_occurrences(id),solution_id uuid NOT NULL REFERENCES el_solutions(id),user_id uuid NOT NULL REFERENCES el_users(id),type_id uuid REFERENCES el_types(id),type_name text,comment text NOT NULL DEFAULT '',resolved boolean NOT NULL DEFAULT false,created_at timestamptz NOT NULL DEFAULT now());
