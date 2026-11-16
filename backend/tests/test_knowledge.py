@@ -9,8 +9,12 @@ from backend.domain import classify, statistics
 
 @pytest.fixture()
 def client():
+    if not os.environ.get('EVENTLENS_TEST_DATABASE') == 'isolated':
+        pytest.fail('Use somente um banco descartável: EVENTLENS_TEST_DATABASE=isolated')
     with connection() as c:
-        for table in ['el_audit','el_evaluations','el_recommendations','el_sources','el_occurrences','el_links','el_solutions','el_types','el_sessions','el_users','el_settings']:
+        if c.execute('SELECT current_database() AS name').fetchone()['name'] != 'eventlens_flow_test':
+            pytest.fail('Banco de testes deve se chamar eventlens_flow_test')
+        for table in ['el_applications','el_audit','el_evaluations','el_recommendations','el_sources','el_occurrences','el_links','el_solutions','el_types','el_sessions','el_users','el_settings']:
             c.execute('DELETE FROM '+table)
         c.execute("INSERT INTO el_users(username,password_hash,role) VALUES('tester',%s,'admin')",(hash_password('test-only-password'),))
     with TestClient(app) as client:
@@ -62,8 +66,9 @@ def test_learning_and_history(client):
     oid=occurrence(client);sid=solution(client,oid)
     assert vote(client,oid,sid,False,correct_procedure='Replace the failed cable and validate',comment='Cable damaged').status_code==200
     h=client.get(f'/occurrences/{oid}/history').json()
-    assert h['applied']['procedure']=='Replace the failed cable and validate'
-    assert h['applied']['author']=='tester' and h['applied']['origin']=='analista'
+    assert h['applied'] is None and h['occurrence']['status']=='pending'
+    assert h['evaluations'][0]['corrective_procedure']=='Replace the failed cable and validate'
+    assert h['evaluations'][0]['comment']=='Cable damaged'
     assert len(h['evaluations'])==1 and h['evaluations'][0]['positive'] is False
     assert h['recommendations'] and h['audit']
     rows=client.get(f'/occurrences/{oid}/recommendations').json()['solutions']

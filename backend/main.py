@@ -5,6 +5,8 @@ import secrets
 import subprocess
 import sys
 from uuid import UUID
+from datetime import datetime
+from .identity import identity_for, digest
 from fastapi import FastAPI, Depends, HTTPException, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -47,11 +49,13 @@ def get_occurrence(c, oid):
 def get_link(c, oid, sid):
     o=get_occurrence(c,oid)
     if not o['type_id']: raise HTTPException(409,'Confirme o tipo do evento antes de avaliar')
-    return c.execute('INSERT INTO el_links(solution_id,type_id) VALUES(%s,%s) ON CONFLICT(solution_id,type_id) DO UPDATE SET solution_id=excluded.solution_id RETURNING id',(sid,o['type_id'])).fetchone()['id']
+    if not c.execute('SELECT id FROM el_solutions WHERE id=%s',(sid,)).fetchone():
+        raise HTTPException(404,'Solução não encontrada')
+    return c.execute('INSERT INTO el_links(solution_id,type_id,scope_key) VALUES(%s,%s,%s) ON CONFLICT(solution_id,type_id,scope_key) DO UPDATE SET solution_id=excluded.solution_id RETURNING id',(sid,o['type_id'],o['scope_key'])).fetchone()['id']
 
 def recommendations(c, oid):
     o=get_occurrence(c,oid)
-    rows=c.execute('''SELECT s.*,l.id AS link_id,count(e.id) FILTER(WHERE e.positive) AS positivos,count(e.id) FILTER(WHERE NOT e.positive) AS negativos,count(e.id) FILTER(WHERE e.positive AND e.created_at>now()-interval '30 days') AS positivos_30d FROM el_links l JOIN el_solutions s ON s.id=l.solution_id LEFT JOIN el_evaluations e ON e.link_id=l.id WHERE l.type_id=%s GROUP BY s.id,l.id''',(o['type_id'],)).fetchall()
+    rows=c.execute('''SELECT s.*,l.id AS link_id,count(e.id) FILTER(WHERE e.positive) AS positivos,count(e.id) FILTER(WHERE NOT e.positive) AS negativos,count(e.id) FILTER(WHERE e.positive AND e.created_at>now()-interval '30 days') AS positivos_30d FROM el_links l JOIN el_solutions s ON s.id=l.solution_id LEFT JOIN el_evaluations e ON e.link_id=l.id WHERE l.type_id=%s AND l.scope_key=%s GROUP BY s.id,l.id''',(o['type_id'],o['scope_key'])).fetchall()
     for s in rows:
         s.update(statistics(s['positivos'],s['negativos']))
         s['sources']=c.execute('SELECT * FROM el_sources WHERE solution_id=%s',(s['id'],)).fetchall()
@@ -95,15 +99,33 @@ def create_user(data: UserCreate,u=Depends(admin)):
 
 class Occurrence(BaseModel):
     title: str = Field(min_length=3,max_length=500)
-    external_id: str | None = Field(default=None,max_length=200)
+    external_id: str | None = Field(default=None,min_length=1,max_length=200)
+    tenant: str = Field(default='',max_length=200)
+    host: str = Field(default='',max_length=200)
+    ips: list[str] = Field(default_factory=list,max_length=100)
+    environment: str = Field(default='',max_length=200)
+    source: str = Field(default='manual',max_length=200)
+    system: str = Field(default='',max_length=200)
+    technical_context: str = Field(default='',max_length=1000)
+    manual_key: UUID | None = None
+    new_occurrence: UUID | None = None
+    received_at: datetime | None = None
 
 @app.post('/occurrences')
 def occurrence(data: Occurrence,u=Depends(user)):
+    identity,scope,context=identity_for(data)
     with connection() as c:
+        c.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))',(identity,))
+        existing=c.execute('SELECT id,context FROM el_occurrences WHERE identity_key=%s',(identity,)).fetchone()
+        if existing:
+            if existing['context']!=context:
+                raise HTTPException(409,'Identificador externo já utilizado com outro contexto')
+            audit(c,existing['id'],u,'searched',{'identity_key':identity})
+            return get_occurrence(c,existing['id'])
         name=classify(data.title); tid=None
         if name: tid=c.execute("INSERT INTO el_types(name,key,origin) VALUES(%s,%s,'rule') ON CONFLICT(key) DO UPDATE SET key=excluded.key RETURNING id",(name,normalized(name))).fetchone()['id']
-        r=c.execute('INSERT INTO el_occurrences(original_title,type_id,external_id,created_by) VALUES(%s,%s,%s,%s) ON CONFLICT(external_id) DO UPDATE SET external_id=excluded.external_id RETURNING id',(data.title,tid,data.external_id,u['id'])).fetchone()
-        audit(c,r['id'],u,'received',{'original_title':data.title,'classified_as':name})
+        r=c.execute('INSERT INTO el_occurrences(original_title,type_id,created_by,identity_key,scope_key,context,received_at) VALUES(%s,%s,%s,%s,%s,%s,coalesce(%s,now())) RETURNING id',(data.title,tid,u['id'],identity,scope,Jsonb(context),data.received_at)).fetchone()
+        audit(c,r['id'],u,'received',{'original_title':data.title,'classified_as':name,'context':context})
         return get_occurrence(c,r['id'])
 
 @app.get('/types')
@@ -133,8 +155,9 @@ def correction(oid: UUID,data: Classification,u=Depends(user)):
         c.execute('SELECT id FROM el_occurrences WHERE id=%s FOR UPDATE',(oid,))
         o=get_occurrence(c,oid)
         tid=c.execute("INSERT INTO el_types(name,key,origin) VALUES(%s,%s,'manual') ON CONFLICT(key) DO UPDATE SET key=excluded.key RETURNING id",(data.name,normalized(data.name))).fetchone()['id']
+        if tid==o['type_id']: return o
         c.execute('UPDATE el_occurrences SET type_id=%s WHERE id=%s',(tid,oid))
-        audit(c,oid,u,'classification_corrected',{'previous_type':str(o['type_id']),'new_type':str(tid)})
+        audit(c,oid,u,'classification_corrected',{'previous_type':str(o['type_id']),'previous_name':o['type_name'],'new_type':str(tid),'new_name':data.name})
         return get_occurrence(c,oid)
 
 @app.get('/occurrences/{oid}/recommendations')
@@ -185,10 +208,30 @@ def save_solution(c,oid,data,u):
         sid=c.execute("INSERT INTO el_solutions(procedure,author,origin) VALUES(%s,%s,'analista') RETURNING id",(data.procedure,u['username'])).fetchone()['id']
     link=get_link(c,oid,sid)
     c.execute('INSERT INTO el_recommendations(occurrence_id,link_id,snapshot) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING',(oid,link,Jsonb({'procedure':data.procedure,'source':source.model_dump() if source else None})))
+    audit(c,oid,u,'solution_saved',{'solution_id':str(sid),'comment':data.comment})
     if data.applied:
-        c.execute("UPDATE el_occurrences SET applied_solution_id=%s,status='resolved',resolved_at=now() WHERE id=%s",(sid,oid))
-    audit(c,oid,u,'solution_saved',{'solution_id':str(sid),'applied':data.applied,'comment':data.comment})
+        record_application(c,oid,sid,u,data.comment,False)
     return sid
+
+
+def record_application(c,oid,sid,u,comment,resolved):
+    c.execute('SELECT id FROM el_occurrences WHERE id=%s FOR UPDATE',(oid,))
+    o=get_occurrence(c,oid)
+    get_link(c,oid,sid)
+    r=c.execute('INSERT INTO el_applications(occurrence_id,solution_id,user_id,type_id,type_name,comment,resolved) VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING id',(oid,sid,u['id'],o['type_id'],o['type_name'],comment,resolved)).fetchone()
+    c.execute("UPDATE el_occurrences SET applied_solution_id=%s,status=%s,resolved_at=CASE WHEN %s THEN now() ELSE NULL END WHERE id=%s",(sid,'resolved' if resolved else 'in_progress',resolved,oid))
+    audit(c,oid,u,'solution_applied',{'application_id':str(r['id']),'solution_id':str(sid),'resolved':resolved,'comment':comment})
+    return r
+
+class Application(BaseModel):
+    solution_id: UUID
+    comment: str = Field(default='',max_length=20000)
+    resolved: bool = False
+
+@app.post('/occurrences/{oid}/applications')
+def application(oid: UUID,data: Application,u=Depends(user)):
+    with connection() as c:
+        return record_application(c,oid,data.solution_id,u,data.comment,data.resolved)
 
 @app.post('/occurrences/{oid}/solutions')
 def solution(oid: UUID,data: Solution,u=Depends(user)):
@@ -203,24 +246,37 @@ class Evaluation(BaseModel):
 
 @app.post('/occurrences/{oid}/evaluations')
 def evaluate(oid: UUID,data: Evaluation,u=Depends(user)):
+    fingerprint=digest({'occurrence_id':str(oid),'user_id':str(u['id']),**data.model_dump(mode='json')})
     with connection() as c:
+        # Global attempt lock precedes occurrence lock: safe across different occurrences.
+        c.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))',(str(data.attempt_key),))
         c.execute('SELECT id FROM el_occurrences WHERE id=%s FOR UPDATE',(oid,))
-        existing=c.execute('SELECT * FROM el_evaluations WHERE attempt_key=%s',(data.attempt_key,)).fetchone()
+        o=get_occurrence(c,oid)
+        existing=c.execute('SELECT e.*,l.solution_id FROM el_evaluations e JOIN el_links l ON l.id=e.link_id WHERE attempt_key=%s',(data.attempt_key,)).fetchone()
         if existing:
-            if existing['occurrence_id']!=oid or existing['link_id']!=get_link(c,oid,data.solution_id) or existing['positive']!=data.positive: raise HTTPException(409,'Tentativa já utilizada')
-            return {'id':existing['id'],'duplicate':True}
+            same=(existing['request_fingerprint']==fingerprint) if existing['request_fingerprint'] else (existing['occurrence_id']==oid and existing['solution_id']==data.solution_id and existing['positive']==data.positive and existing['user_id']==u['id'] and (existing['comment'] or '')==data.comment and data.correct_procedure is None)
+            if not same: raise HTTPException(409,'Tentativa já utilizada para outros dados')
+            return {'id':existing['id'],'duplicate':True,'corrective_solution_id':existing['corrective_solution_id']}
+        if data.positive and data.correct_procedure:
+            raise HTTPException(422,'Procedimento corretivo pertence à avaliação negativa')
         link=get_link(c,oid,data.solution_id)
         c.execute('INSERT INTO el_recommendations(occurrence_id,link_id,snapshot) SELECT %s,%s,jsonb_build_object(\'procedure\',procedure) FROM el_solutions WHERE id=%s ON CONFLICT DO NOTHING',(oid,link,data.solution_id))
-        r=c.execute('INSERT INTO el_evaluations(occurrence_id,link_id,positive,comment,user_id,attempt_key) VALUES(%s,%s,%s,%s,%s,%s) RETURNING id',(oid,link,data.positive,data.comment,u['id'],data.attempt_key)).fetchone()
-        if data.positive: c.execute("UPDATE el_occurrences SET status='resolved',applied_solution_id=%s,resolved_at=now() WHERE id=%s",(data.solution_id,oid))
-        elif data.correct_procedure: save_solution(c,oid,Solution(procedure=data.correct_procedure,applied=True,comment=data.comment),u)
-        audit(c,oid,u,'evaluation',{'evaluation_id':str(r['id']),'positive':data.positive})
-        return r
+        corrective=save_solution(c,oid,Solution(procedure=data.correct_procedure,comment=data.comment),u) if data.correct_procedure else None
+        r=c.execute('INSERT INTO el_evaluations(occurrence_id,link_id,positive,comment,user_id,attempt_key,request_fingerprint,evaluated_type_name,corrective_solution_id) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id',(oid,link,data.positive,data.comment,u['id'],data.attempt_key,fingerprint,o['type_name'],corrective)).fetchone()
+        audit(c,oid,u,'evaluation',{'evaluation_id':str(r['id']),'solution_id':str(data.solution_id),'link_id':str(link),'evaluated_type':o['type_name'],'positive':data.positive,'corrective_solution_id':str(corrective) if corrective else None,'comment':data.comment})
+        return {**r,'duplicate':False,'corrective_solution_id':corrective}
 
 @app.get('/occurrences/{oid}/history')
 def history(oid: UUID,u=Depends(user)):
     with connection() as c:
-        return {'occurrence':get_occurrence(c,oid),'recommendations':c.execute('SELECT * FROM el_recommendations WHERE occurrence_id=%s ORDER BY created_at',(oid,)).fetchall(),'evaluations':c.execute('SELECT e.*,u.username,s.procedure,t.name AS evaluated_type FROM el_evaluations e JOIN el_users u ON u.id=e.user_id JOIN el_links l ON l.id=e.link_id JOIN el_solutions s ON s.id=l.solution_id JOIN el_types t ON t.id=l.type_id WHERE occurrence_id=%s ORDER BY e.created_at',(oid,)).fetchall(),'audit':c.execute('SELECT a.*,u.username FROM el_audit a LEFT JOIN el_users u ON u.id=a.user_id WHERE occurrence_id=%s ORDER BY created_at',(oid,)).fetchall(),'applied':c.execute('SELECT s.* FROM el_solutions s JOIN el_occurrences o ON o.applied_solution_id=s.id WHERE o.id=%s',(oid,)).fetchone()}
+        return {
+            'occurrence':get_occurrence(c,oid),
+            'recommendations':c.execute('SELECT r.*,l.solution_id,l.type_id,t.name AS recommended_type FROM el_recommendations r JOIN el_links l ON l.id=r.link_id JOIN el_types t ON t.id=l.type_id WHERE r.occurrence_id=%s ORDER BY r.created_at,r.id',(oid,)).fetchall(),
+            'evaluations':c.execute('SELECT e.*,u.username,s.procedure,l.solution_id,l.type_id,coalesce(e.evaluated_type_name,t.name) AS evaluated_type,cs.procedure AS corrective_procedure FROM el_evaluations e JOIN el_users u ON u.id=e.user_id JOIN el_links l ON l.id=e.link_id JOIN el_solutions s ON s.id=l.solution_id JOIN el_types t ON t.id=l.type_id LEFT JOIN el_solutions cs ON cs.id=e.corrective_solution_id WHERE e.occurrence_id=%s ORDER BY e.created_at,e.id',(oid,)).fetchall(),
+            'audit':c.execute('SELECT a.*,u.username FROM el_audit a LEFT JOIN el_users u ON u.id=a.user_id WHERE occurrence_id=%s ORDER BY created_at,a.id',(oid,)).fetchall(),
+            'applications':c.execute('SELECT a.*,s.procedure,u.username FROM el_applications a JOIN el_solutions s ON s.id=a.solution_id JOIN el_users u ON u.id=a.user_id WHERE a.occurrence_id=%s ORDER BY a.created_at,a.id',(oid,)).fetchall(),
+            'applied':c.execute('SELECT s.* FROM el_solutions s JOIN el_occurrences o ON o.applied_solution_id=s.id WHERE o.id=%s',(oid,)).fetchone()
+        }
 
 @app.post('/occurrences/{oid}/otrs')
 def otrs(oid: UUID,u=Depends(user)):
