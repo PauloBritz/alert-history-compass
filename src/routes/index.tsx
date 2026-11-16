@@ -45,8 +45,9 @@ function Index() {
   function occurrencePayload(title: string, eventContext = context) {
     const lookup = JSON.stringify({ title: title.trim().toLocaleLowerCase(), context: eventContext });
     const manual_key = manualKeys[lookup] || crypto.randomUUID();
-    setManualKeys(keys => ({ ...keys, [lookup]: manual_key }));
-    return { title, ...eventContext, external_id: eventContext.external_id || null, manual_key, ...(newOccurrence ? { new_occurrence: newKey || crypto.randomUUID() } : {}) };
+    const instance = newOccurrence ? newKey || crypto.randomUUID() : manualKeys[`instance:${lookup}`];
+    setManualKeys(keys => ({ ...keys, [lookup]: manual_key, ...(instance ? { [`instance:${lookup}`]: instance } : {}) }));
+    return { title, ...eventContext, external_id: eventContext.external_id || null, manual_key, ...(instance ? { new_occurrence: instance } : {}) };
   }
   const [analyst, setAnalyst] = useState<Analyst | null>(null);
   const [knowledge, setKnowledge] = useState<Knowledge | null>(null);
@@ -92,7 +93,9 @@ function Index() {
     try {
       const d = parseResultado(raw);
       if (!analyst) throw new Error("Entre na sua conta antes de importar.");
-      const o = await api<Occurrence>("/occurrences", "POST", occurrencePayload(d.evento, { ...context, host: d.host || context.host, ips: d.ips.length ? d.ips : context.ips }));
+      const importedContext = { ...context, host: d.host || context.host, ips: d.ips?.length ? d.ips : context.ips };
+      const o = await api<Occurrence>("/occurrences", "POST", occurrencePayload(d.evento, importedContext));
+      setContext(importedContext); setNewOccurrence(false); setNewKey(null);
       setOccurrence(o); setKnowledge(await api<Knowledge>(`/occurrences/${o.id}/recommendations`));
       setData(d); setTexto(d.evento); setPanel(null); setRaw("");
       toast.success("JSON importado");
@@ -209,7 +212,7 @@ function Index() {
               </div>
             ) : (
               <div className="space-y-3">
-                {candidatos.map((c, i) => <TicketCard key={c.ticket_id} c={c} otrsBase={otrsBase} defaultOpen={i === 0} feedback={true} classified={!!occurrence?.type_id} occurrenceId={occurrence?.id ?? null} evento={data.evento} onSaved={() => setKbKey((k) => k + 1)} />)}
+                {candidatos.map((c, i) => <TicketCard key={`${occurrence?.id}-${occurrence?.type_id}-${c.ticket_id}`} c={c} otrsBase={otrsBase} defaultOpen={i === 0} feedback={true} classified={!!occurrence?.type_id} occurrenceId={occurrence?.id ?? null} evento={data.evento} onSaved={() => setKbKey((k) => k + 1)} />)}
               </div>
             )}
 
