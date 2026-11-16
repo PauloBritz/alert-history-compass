@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { DEMOS, artigosDe, parseResultado, type Candidato, type Decisao, type Resultado } from "@/lib/otrs";
 import { KnowledgeWorkspace, LocalLogin, SolutionRating, AdminSettings } from "@/components/KnowledgeWorkspace";
-import { api, type Analyst, type Knowledge, type Occurrence, type Solution } from "@/lib/api";
+import { api, type Analyst, type Knowledge, type Occurrence, type Solution, type EventContext } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 
@@ -38,6 +38,16 @@ const DECISAO: Record<Decisao, { titulo: string; icon: typeof Repeat; tone: stri
 function Index() {
   const [data, setData] = useState<Resultado>({ evento: "", candidatos: [], palavras: [], pesos: {}, host: null, ips: [], categorias: [], periodo: {}, buscas_realizadas: [], chamados_encontrados: 0, chamados_analisados: 0, resumo: { mesmo_evento: 0, relacionados: 0, ainda_abertos: 0 }, decisao: "NOVO", mensagem: "" });
   const [texto, setTexto] = useState("");
+  const [context, setContext] = useState<EventContext>({ tenant: '', host: '', ips: [], environment: '', source: 'manual', system: '', technical_context: '', external_id: '' });
+  const [manualKeys, setManualKeys] = useState<Record<string, string>>({});
+  const [newOccurrence, setNewOccurrence] = useState(false);
+  const [newKey, setNewKey] = useState<string | null>(null);
+  function occurrencePayload(title: string, eventContext = context) {
+    const lookup = JSON.stringify({ title: title.trim().toLocaleLowerCase(), context: eventContext });
+    const manual_key = manualKeys[lookup] || crypto.randomUUID();
+    setManualKeys(keys => ({ ...keys, [lookup]: manual_key }));
+    return { title, ...eventContext, external_id: eventContext.external_id || null, manual_key, ...(newOccurrence ? { new_occurrence: newKey || crypto.randomUUID() } : {}) };
+  }
   const [analyst, setAnalyst] = useState<Analyst | null>(null);
   const [knowledge, setKnowledge] = useState<Knowledge | null>(null);
   const [occurrence, setOccurrence] = useState<Occurrence | null>(null);
@@ -51,16 +61,19 @@ function Index() {
 
   useEffect(() => {
     setApiUrl(localStorage.getItem("eventlens.api") ?? "");
+    try { setManualKeys(JSON.parse(sessionStorage.getItem('eventlens.manualKeys') || '{}')); } catch { /* invalid browser cache */ }
     setOtrsBase(localStorage.getItem("eventlens.otrs") ?? OTRS_BASE_DEFAULT);
     void api<Analyst>("/auth/me").then(setAnalyst).catch(() => {});
   }, []);
+
+  useEffect(() => { sessionStorage.setItem('eventlens.manualKeys', JSON.stringify(manualKeys)); }, [manualKeys]);
 
   async function analisar() {
     if (!texto.trim()) return;
     if (!analyst) { toast.info("Entre na sua conta antes de analisar."); return; }
     setLoading(true); setOtrsError(""); setKnowledge(null); setOccurrence(null);
     try {
-      const o = await api<Occurrence>("/occurrences", "POST", { title: texto });
+      const o = await api<Occurrence>("/occurrences", "POST", occurrencePayload(texto));
       setOccurrence(o);
       const k = await api<Knowledge>(`/occurrences/${o.id}/recommendations`);
       setKnowledge(k);
@@ -69,7 +82,7 @@ function Index() {
         try { const result = await api<Resultado>(`/occurrences/${o.id}/otrs`, "POST"); setData({ ...result, evento: o.original_title }); }
         catch (e) { setOtrsError((e as Error).message); }
       }
-      toast.success("Consulta à base concluída");
+      setNewOccurrence(false); setNewKey(null); toast.success("Consulta à base concluída");
     } catch (e) { toast.error((e as Error).message); } finally {
       setLoading(false);
     }
@@ -79,7 +92,7 @@ function Index() {
     try {
       const d = parseResultado(raw);
       if (!analyst) throw new Error("Entre na sua conta antes de importar.");
-      const o = await api<Occurrence>("/occurrences", "POST", { title: d.evento });
+      const o = await api<Occurrence>("/occurrences", "POST", occurrencePayload(d.evento, { ...context, host: d.host || context.host, ips: d.ips.length ? d.ips : context.ips }));
       setOccurrence(o); setKnowledge(await api<Knowledge>(`/occurrences/${o.id}/recommendations`));
       setData(d); setTexto(d.evento); setPanel(null); setRaw("");
       toast.success("JSON importado");
@@ -131,7 +144,9 @@ function Index() {
               {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} Analisar
             </Button>
           </form>
-
+          <details className="mt-4"><summary className="cursor-pointer text-sm text-muted-foreground">Identidade do evento</summary><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{([
+            ['tenant', 'Cliente / tenant'], ['host', 'Host'], ['environment', 'Ambiente'], ['source', 'Origem'], ['system', 'Sistema monitorado'], ['external_id', 'Identificador externo'], ['technical_context', 'Contexto técnico'],
+          ] as const).map(([key, label]) => <Field key={key} label={label} value={context[key] || ''} onChange={value => setContext(c => ({ ...c, [key]: value }))} />)}<Field label="IPs" value={context.ips.join(', ')} onChange={value => setContext(c => ({ ...c, ips: value.split(',').map(ip => ip.trim()).filter(Boolean) }))} /></div><label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={newOccurrence} onChange={e => { setNewOccurrence(e.target.checked); setNewKey(e.target.checked ? crypto.randomUUID() : null); }} />Criar uma nova ocorrência</label></details>
 
           {panel === "json" && (
             <div className="mt-5 rounded-xl border bg-background p-4">
@@ -194,7 +209,7 @@ function Index() {
               </div>
             ) : (
               <div className="space-y-3">
-                {candidatos.map((c, i) => <TicketCard key={c.ticket_id} c={c} otrsBase={otrsBase} defaultOpen={i === 0} feedback={true} occurrenceId={occurrence?.id ?? null} evento={data.evento} onSaved={() => setKbKey((k) => k + 1)} />)}
+                {candidatos.map((c, i) => <TicketCard key={c.ticket_id} c={c} otrsBase={otrsBase} defaultOpen={i === 0} feedback={true} classified={!!occurrence?.type_id} occurrenceId={occurrence?.id ?? null} evento={data.evento} onSaved={() => setKbKey((k) => k + 1)} />)}
               </div>
             )}
 
@@ -311,30 +326,25 @@ function ScoreRing({ score, tone }: { score: number; tone: string }) {
   );
 }
 
-function FeedbackTicket({ c, oid, solucao, autor, articleId, sourceDate, onSaved }: { c: Candidato; oid: string; solucao: string; autor: string; articleId?: string; sourceDate: string; onSaved: () => void }) {
-  const [solution, setSolution] = useState<Solution | null>(null);
+function FeedbackTicket({ c, oid, solucao, autor, articleId, sourceDate, onSaved, classified }: { c: Candidato; oid: string; solucao: string; autor: string; articleId?: string; sourceDate: string; onSaved: () => void; classified: boolean }) {
+  const [solution, setSolution] = useState<Solution | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   async function save() {
+    setBusy(true); setError('');
     try {
-      const r = await api<{id: string}>(`/occurrences/${oid}/solutions`, "POST", { procedure: solucao, source: { ticket_number: c.numero, article_id: articleId ?? null, ticket_title: c.titulo, author: autor, source_date: sourceDate, content: solucao, metadata: c } });
+      const r = await api<{id: string}>(`/occurrences/${oid}/solutions`, "POST", { procedure: solucao, applied: false, source: { ticket_number: c.numero, article_id: articleId ?? null, ticket_title: c.titulo, author: autor, source_date: sourceDate, content: solucao, metadata: c } });
+      toast.success('Solução cadastrada na KB.');
       const k = await api<Knowledge>(`/occurrences/${oid}/recommendations`);
       setSolution(k.solutions.find(s => s.id === r.id) ?? null); onSaved();
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) { setError((e as Error).message); toast.error((e as Error).message); } finally { setBusy(false); }
   }
-  return solution ? <SolutionRating oid={oid} solution={solution} onSaved={async () => { const k = await api<Knowledge>(`/occurrences/${oid}/recommendations`); setSolution(k.solutions.find(s => s.id === solution.id) ?? null); onSaved(); }} /> : <div className="border-t p-4"><p className="mb-2 text-xs text-muted-foreground">AINDA NÃO VALIDADA para o tipo de evento atual</p><Button variant="outline" onClick={save}><PlusIcon /> Salvar na KB e avaliar</Button></div>;
+  return solution ? <SolutionRating oid={oid} solution={solution} classified={classified} onSaved={async () => { const k = await api<Knowledge>(`/occurrences/${oid}/recommendations`); setSolution(k.solutions.find(s => s.id === solution.id) ?? null); onSaved(); }} /> : <div className="border-t p-4"><p className="mb-2 text-xs text-muted-foreground">AINDA NÃO VALIDADA para o tipo de evento atual</p>{error && <p role="alert" className="mb-2 text-sm text-destructive">{error}</p>}<Button variant="outline" disabled={busy || !classified} onClick={save}><PlusIcon /> Salvar na KB</Button></div>;
 }
 function PlusIcon() { return <Wrench className="size-4" />; }
 
-function TicketCard({ c, otrsBase, defaultOpen, feedback, occurrenceId, evento, onSaved }: { c: Candidato; otrsBase: string; defaultOpen: boolean; feedback?: boolean; occurrenceId: string | null; evento: string; onSaved: () => void }) {
+function TicketCard({ c, otrsBase, defaultOpen, feedback, occurrenceId, evento, onSaved, classified }: { c: Candidato; otrsBase: string; defaultOpen: boolean; feedback?: boolean; classified: boolean; occurrenceId: string | null; evento: string; onSaved: () => void }) {
   const [open, setOpen] = useState(defaultOpen);
   const artigos = artigosDe(c);
   const resumo = artigos[artigos.length - 1]?.texto.replace(/\s+/g, " ");
-  async function salvarNaBase(texto: string, autor: string) {
-    try {
-      if (!occurrenceId) throw new Error("Analise o evento antes de salvar.");
-      await api(`/occurrences/${occurrenceId}/solutions`, "POST", { procedure: texto, source: { ticket_number: c.numero, ticket_title: c.titulo, author: autor, content: texto, metadata: c } });
-      toast.success("Solução salva na base de conhecimento"); onSaved();
-    } catch (e) { toast.error((e as Error).message); }
-  }
   const dup = c.classe === "PROVAVEL_DUPLICADO";
   const tone = dup ? "text-warning" : c.classe === "RELACIONADO" ? "text-info" : "text-muted-foreground";
   const link = `${otrsBase}?Action=AgentTicketZoom;TicketID=${c.ticket_id}`;
@@ -366,7 +376,7 @@ function TicketCard({ c, otrsBase, defaultOpen, feedback, occurrenceId, evento, 
         </div>
         <ChevronDown className={`size-5 shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
       </button>
-      {feedback && occurrenceId && artigos.length > 0 && artigos.map((n, i) => <FeedbackTicket key={`${occurrenceId}-${c.numero}-${i}`} c={c} oid={occurrenceId} solucao={n.texto} autor={n.autor} sourceDate={n.criado} {...(n.id ? { articleId: n.id } : {})} onSaved={onSaved} />)}
+      {feedback && occurrenceId && artigos.length > 0 && artigos.map((n, i) => <FeedbackTicket key={`${occurrenceId}-${c.numero}-${i}`} c={c} oid={occurrenceId} classified={classified} solucao={n.texto} autor={n.autor} sourceDate={n.criado} {...(n.id ? { articleId: n.id } : {})} onSaved={onSaved} />)}
       {open && (
         <div className="space-y-4 border-t p-4">
           <div className="grid gap-3 text-sm sm:grid-cols-3">
@@ -391,10 +401,6 @@ function TicketCard({ c, otrsBase, defaultOpen, feedback, occurrenceId, evento, 
             <div key={i} className="rounded-xl border-l-2 border-primary bg-surface p-3">
               <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
                 <Wrench className="size-3 text-primary" />{n.autor} · {n.criado}
-                <button onClick={() => salvarNaBase(n.texto, n.autor.split(" via ")[0] ?? n.autor)}
-                  className="ml-auto rounded-md border px-2 py-0.5 font-sans text-xs text-foreground hover:border-primary hover:text-primary">
-                  Salvar na base
-                </button>
               </div>
               {"assunto" in n && n.assunto && <div className="mt-1 text-xs text-muted-foreground">{n.assunto}</div>}
               <p className="mt-2 max-h-80 overflow-auto whitespace-pre-line text-sm">{n.texto}</p>
