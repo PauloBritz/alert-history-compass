@@ -47,6 +47,8 @@ def get_occurrence(c, oid):
     return o
 
 def get_link(c, oid, sid):
+    # All callers serialize with classification changes, not just evaluations.
+    c.execute('SELECT id FROM el_occurrences WHERE id=%s FOR UPDATE',(oid,))
     o=get_occurrence(c,oid)
     if not o['type_id']: raise HTTPException(409,'Confirme o tipo do evento antes de avaliar')
     if not c.execute('SELECT id FROM el_solutions WHERE id=%s',(sid,)).fetchone():
@@ -54,6 +56,7 @@ def get_link(c, oid, sid):
     return c.execute('INSERT INTO el_links(solution_id,type_id,scope_key) VALUES(%s,%s,%s) ON CONFLICT(solution_id,type_id,scope_key) DO UPDATE SET solution_id=excluded.solution_id RETURNING id',(sid,o['type_id'],o['scope_key'])).fetchone()['id']
 
 def recommendations(c, oid):
+    c.execute('SELECT id FROM el_occurrences WHERE id=%s FOR UPDATE',(oid,))
     o=get_occurrence(c,oid)
     rows=c.execute('''SELECT s.*,l.id AS link_id,count(e.id) FILTER(WHERE e.positive) AS positivos,count(e.id) FILTER(WHERE NOT e.positive) AS negativos,count(e.id) FILTER(WHERE e.positive AND e.created_at>now()-interval '30 days') AS positivos_30d FROM el_links l JOIN el_solutions s ON s.id=l.solution_id LEFT JOIN el_evaluations e ON e.link_id=l.id WHERE l.type_id=%s AND l.scope_key=%s GROUP BY s.id,l.id''',(o['type_id'],o['scope_key'])).fetchall()
     for s in rows:
@@ -195,6 +198,10 @@ class Solution(BaseModel):
     comment: str = Field(default='',max_length=20000)
 
 def save_solution(c,oid,data,u):
+    c.execute('SELECT id FROM el_occurrences WHERE id=%s FOR UPDATE',(oid,))
+    o=get_occurrence(c,oid)
+    if data.applied and o['status']=='resolved':
+        raise HTTPException(409,'Ocorrência encerrada: registre uma nova ocorrência para aplicar outra solução')
     source=data.source
     if source:
         key=(os.getenv('OTRS_SOURCE_ID','local-otrs')+':'+source.ticket_number+':'+(source.article_id or hashlib.sha256(source.content.encode()).hexdigest()))
@@ -217,6 +224,8 @@ def save_solution(c,oid,data,u):
 def record_application(c,oid,sid,u,comment,resolved):
     c.execute('SELECT id FROM el_occurrences WHERE id=%s FOR UPDATE',(oid,))
     o=get_occurrence(c,oid)
+    if o['status']=='resolved':
+        raise HTTPException(409,'Ocorrência encerrada: registre uma nova ocorrência para aplicar outra solução')
     get_link(c,oid,sid)
     r=c.execute('INSERT INTO el_applications(occurrence_id,solution_id,user_id,type_id,type_name,comment,resolved) VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING id',(oid,sid,u['id'],o['type_id'],o['type_name'],comment,resolved)).fetchone()
     c.execute("UPDATE el_occurrences SET applied_solution_id=%s,status=%s,resolved_at=CASE WHEN %s THEN now() ELSE NULL END WHERE id=%s",(sid,'resolved' if resolved else 'in_progress',resolved,oid))

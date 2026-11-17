@@ -1,4 +1,6 @@
 # Roadmap
+- [ ] Revisar caminhos alternativos, concorrência de classificação, telas desatualizadas e preservação de ocorrências encerradas
+- [ ] Atualizar testes e pacote completo com relatório da revisão transversal
 - [x] Corrigir avaliações, aplicação explícita, identidade contextual e histórico do V2
 - [x] Executar testes de persistência em banco isolado e testes da interface
 - [x] Preparar arquivos completos, SQL não executado, diagnóstico e instruções de revisão/rollback
