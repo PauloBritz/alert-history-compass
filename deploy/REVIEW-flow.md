@@ -40,7 +40,9 @@ O ZIP contém os arquivos completos, não diffs. A base é o pacote local V2 ant
 | src/components/KnowledgeWorkspace.tsx | Alterado | Avaliação e aplicação separadas, atualização/histórico | Retentativas sem bloqueio |
 | src/routes/index.tsx | Alterado | Contexto, continuidade manual, cadastro único OTRS | Caminhos da tela coerentes |
 | src/test/knowledge-flow.test.tsx | Novo | Contratos e falhas da interface | 7 testes novos |
-| src/test/kb.test.ts | Preservado do projeto | Testes anteriores | Mantém suíte existente |
+| src/test/kb.test.ts | Alterado somente import | Mantém os 3 testes e asserts anteriores | Sem camada de banco obsoleta |
+| src/lib/kb-statistics.ts | Novo | Extração da aritmética legada sem mudança de regra | Testes independentes de servidor |
+| src/lib/kb.ts | Alterado no editor | Reexporta helper; wrapper obsoleto excluído do pacote como antes | Nenhum segundo backend no export |
 | deploy/Dockerfile-api | Alterado | Remove migração no startup | Reiniciar API não altera banco |
 | deploy/REVIEW-flow.md | Novo | Diagnóstico e procedimentos | Revisão operacional |
 | AGENTS.md | Alterado | Regras estruturais documentadas | Consistência futura |

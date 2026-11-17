@@ -6,11 +6,7 @@ export interface KbSolucao {
   positivos: number; negativos: number; positivos_30d: number;
 }
 
-/** Taxa de sucesso em % (null se nunca testada). */
-export function taxaSucesso(pos: number, neg: number): number | null {
-  const t = pos + neg;
-  return t === 0 ? null : Math.round((pos / t) * 100);
-}
+export { taxaSucesso } from './kb-statistics';
 
 export async function buscarKb(texto: string): Promise<KbSolucao[]> {
   const data = JSON.parse(await fnBuscar({ data: { texto } })) as KbSolucao[];

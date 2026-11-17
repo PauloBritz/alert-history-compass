@@ -11,6 +11,7 @@
 
 ## Data layer
 - Active KB UI accesses the standalone Python API through src/lib/api.ts; only backend/ uses Psycopg and DATABASE_URL. Why: database credentials and business rules must remain in the local Python service.
+- Keep legacy percentage arithmetic in the browser-safe kb-statistics module, separate from retired database wrappers. Why: preserve existing arithmetic tests in the standalone Python-backed export without bundling a second data backend.
 - Statistics are aggregated by solution/type link and immutable evaluation classification; legacy votes stay separate. Why: reclassification must not contaminate efficacy statistics.
 - Occurrence identity uses scoped external IDs or contextual hashes, with browser session keys for context-free manual searches; never merge legacy rows by title. Why: repeated searches must recover history without crossing incident boundaries.
 - Evaluation, knowledge registration and explicit application are distinct operations; only an application with resolved=true closes an occurrence. Why: negative feedback and a saved alternative are not proof of incident resolution.
