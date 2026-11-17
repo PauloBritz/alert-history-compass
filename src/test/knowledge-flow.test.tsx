@@ -11,6 +11,32 @@ beforeEach(() => { vi.resetAllMocks(); });
 afterEach(cleanup);
 
 describe('Evaluation persistence contract', () => {
+  it('does not submit application for a closed occurrence', () => {
+    render(<SolutionRating oid="occ-1" solution={solution} onSaved={vi.fn()} closed />);
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar aplicação' }));
+    expect(mocked).not.toHaveBeenCalled();
+  });
+
+  it('reports HTTP error and restores application controls', async () => {
+    mocked.mockRejectedValueOnce(new Error('Falha real da API'));
+    const refreshed=vi.fn();
+    render(<SolutionRating oid="occ-1" solution={solution} onSaved={refreshed} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar aplicação' }));
+    const confirm=screen.getByRole('button', { name: 'Confirmar aplicação' });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(confirm).toBeEnabled());
+    expect(screen.getByRole('alert')).toHaveTextContent('Falha real da API');
+    expect(refreshed).not.toHaveBeenCalled();
+  });
+
+  it('rejects an application response without persisted id', async () => {
+    mocked.mockResolvedValue({}); const refreshed=vi.fn();
+    render(<SolutionRating oid="occ-1" solution={solution} onSaved={refreshed} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar aplicação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar aplicação' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(refreshed).not.toHaveBeenCalled();
+  });
   it('posts positive evaluation, not solution creation, and refreshes only after persistence', async () => {
     const refreshed = vi.fn(); mocked.mockResolvedValue({ id: 'eval-1', duplicate: false });
     render(<SolutionRating oid="occ-1" solution={solution} onSaved={refreshed} />);

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, AlertTriangle, CheckCircle2, ChevronDown, Clock, Copy, ExternalLink, FileJson,
   History, Loader2, Network, Repeat, Search, Server, Settings2, Sparkles, Tag, ThumbsDown, ThumbsUp, User, Wrench,
@@ -58,6 +58,7 @@ function Index() {
   const [panel, setPanel] = useState<null | "json" | "config">(null);
   const [raw, setRaw] = useState("");
   const [loading, setLoading] = useState(false);
+  const requestVersion = useRef(0);
   const [filtro, setFiltro] = useState<"todos" | "abertos" | "duplicados">("todos");
 
   useEffect(() => {
@@ -72,34 +73,42 @@ function Index() {
   async function analisar() {
     if (!texto.trim()) return;
     if (!analyst) { toast.info("Entre na sua conta antes de analisar."); return; }
-    setLoading(true); setOtrsError(""); setKnowledge(null); setOccurrence(null);
+    const version = ++requestVersion.current;
+    setLoading(true); setOtrsError(""); setKnowledge(null); setOccurrence(null); setData(previous => ({ ...previous, evento: "", candidatos: [] }));
     try {
       const o = await api<Occurrence>("/occurrences", "POST", occurrencePayload(texto));
+      if (version !== requestVersion.current) return;
       setOccurrence(o);
       const k = await api<Knowledge>(`/occurrences/${o.id}/recommendations`);
+      if (version !== requestVersion.current) return;
       setKnowledge(k);
       setData({ ...data, evento: o.original_title, candidatos: [], chamados_analisados: 0, chamados_encontrados: 0, resumo: { mesmo_evento: 0, relacionados: 0, ainda_abertos: 0 }, decisao: "NOVO", mensagem: "" });
       if (k.otrs_required) {
-        try { const result = await api<Resultado>(`/occurrences/${o.id}/otrs`, "POST"); setData({ ...result, evento: o.original_title }); }
-        catch (e) { setOtrsError((e as Error).message); }
+        try { const result = await api<Resultado>(`/occurrences/${o.id}/otrs`, "POST"); if (version === requestVersion.current) setData({ ...result, evento: o.original_title }); }
+        catch (e) { if (version === requestVersion.current) setOtrsError((e as Error).message); }
       }
+      if (version !== requestVersion.current) return;
       setNewOccurrence(false); setNewKey(null); toast.success("Consulta à base concluída");
     } catch (e) { toast.error((e as Error).message); } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   }
 
   async function importar() {
+    const version = ++requestVersion.current; setLoading(true);
     try {
       const d = parseResultado(raw);
       if (!analyst) throw new Error("Entre na sua conta antes de importar.");
       const importedContext = { ...context, host: d.host || context.host, ips: d.ips?.length ? d.ips : context.ips };
       const o = await api<Occurrence>("/occurrences", "POST", occurrencePayload(d.evento, importedContext));
+      if (version !== requestVersion.current) return;
       setContext(importedContext); setNewOccurrence(false); setNewKey(null);
-      setOccurrence(o); setKnowledge(await api<Knowledge>(`/occurrences/${o.id}/recommendations`));
+      const k = await api<Knowledge>(`/occurrences/${o.id}/recommendations`);
+      if (version !== requestVersion.current) return;
+      setOccurrence(o); setKnowledge(k); setOtrsError("");
       setData(d); setTexto(d.evento); setPanel(null); setRaw("");
       toast.success("JSON importado");
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) { if (version === requestVersion.current) toast.error((e as Error).message); } finally { if (version === requestVersion.current) setLoading(false); }
   }
 
   const candidatos = useMemo(() => data.candidatos.filter((c) =>
@@ -124,7 +133,7 @@ function Index() {
               <span className={`size-2 rounded-full ${apiUrl ? "bg-success pulse-dot text-success" : "bg-muted-foreground"}`} />
               {analyst ? analyst.username : "Não autenticado"}
             </span>
-            {analyst && <Button variant="ghost" onClick={async () => { await api("/auth/logout", "POST"); setAnalyst(null); setKnowledge(null); setOccurrence(null); }}>Sair</Button>}
+            {analyst && <Button variant="ghost" onClick={async () => { await api("/auth/logout", "POST"); requestVersion.current++; setLoading(false); setAnalyst(null); setKnowledge(null); setOccurrence(null); setData(previous => ({ ...previous, evento: "", candidatos: [] })); }}>Sair</Button>}
             <HeaderBtn onClick={() => setPanel(panel === "json" ? null : "json")} icon={FileJson}>Importar JSON</HeaderBtn>
             <HeaderBtn onClick={() => setPanel(panel === "config" ? null : "config")} icon={Settings2}>Config</HeaderBtn>
           </div>
@@ -161,7 +170,7 @@ function Index() {
                   Abrir arquivo
                   <input type="file" accept=".json,.txt" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setRaw(await f.text()); }} />
                 </label>
-                <button onClick={importar} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Carregar</button>
+                <Button disabled={loading} onClick={importar}>Carregar</Button>
               </div>
             </div>
           )}
@@ -212,7 +221,7 @@ function Index() {
               </div>
             ) : (
               <div className="space-y-3">
-                {candidatos.map((c, i) => <TicketCard key={`${occurrence?.id}-${occurrence?.type_id}-${c.ticket_id}`} c={c} otrsBase={otrsBase} defaultOpen={i === 0} feedback={true} classified={!!occurrence?.type_id} occurrenceId={occurrence?.id ?? null} evento={data.evento} onSaved={() => setKbKey((k) => k + 1)} />)}
+                {candidatos.map((c, i) => <TicketCard key={`${occurrence?.id}-${occurrence?.type_id}-${c.ticket_id}`} c={c} otrsBase={otrsBase} defaultOpen={i === 0} feedback={true} closed={occurrence?.status === "resolved"} refreshKey={kbKey} classified={!!occurrence?.type_id} occurrenceId={occurrence?.id ?? null} evento={data.evento} onSaved={() => setKbKey((k) => k + 1)} />)}
               </div>
             )}
 
@@ -329,8 +338,14 @@ function ScoreRing({ score, tone }: { score: number; tone: string }) {
   );
 }
 
-function FeedbackTicket({ c, oid, solucao, autor, articleId, sourceDate, onSaved, classified }: { c: Candidato; oid: string; solucao: string; autor: string; articleId?: string; sourceDate: string; onSaved: () => void; classified: boolean }) {
+function FeedbackTicket({ c, oid, solucao, autor, articleId, sourceDate, onSaved, classified, closed, refreshKey }: { c: Candidato; oid: string; solucao: string; autor: string; articleId?: string; sourceDate: string; onSaved: () => void; classified: boolean; closed: boolean; refreshKey: number }) {
   const [solution, setSolution] = useState<Solution | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  useEffect(() => {
+    if (!solution || !refreshKey) return;
+    let active = true;
+    void api<Knowledge>(`/occurrences/${oid}/recommendations`).then(k => { if (active) setSolution(k.solutions.find(s => s.id === solution.id) ?? null); }).catch(e => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, [refreshKey, oid, solution?.id]);
   async function save() {
     setBusy(true); setError('');
     try {
@@ -340,11 +355,11 @@ function FeedbackTicket({ c, oid, solucao, autor, articleId, sourceDate, onSaved
       setSolution(k.solutions.find(s => s.id === r.id) ?? null); onSaved();
     } catch (e) { setError((e as Error).message); toast.error((e as Error).message); } finally { setBusy(false); }
   }
-  return solution ? <SolutionRating oid={oid} solution={solution} classified={classified} onSaved={async () => { const k = await api<Knowledge>(`/occurrences/${oid}/recommendations`); setSolution(k.solutions.find(s => s.id === solution.id) ?? null); onSaved(); }} /> : <div className="border-t p-4"><p className="mb-2 text-xs text-muted-foreground">AINDA NÃO VALIDADA para o tipo de evento atual</p>{error && <p role="alert" className="mb-2 text-sm text-destructive">{error}</p>}<Button variant="outline" disabled={busy || !classified} onClick={save}><PlusIcon /> Salvar na KB</Button></div>;
+  return solution ? <SolutionRating oid={oid} solution={solution} closed={closed} classified={classified} onSaved={async () => { const k = await api<Knowledge>(`/occurrences/${oid}/recommendations`); setSolution(k.solutions.find(s => s.id === solution.id) ?? null); onSaved(); }} /> : <div className="border-t p-4"><p className="mb-2 text-xs text-muted-foreground">AINDA NÃO VALIDADA para o tipo de evento atual</p>{error && <p role="alert" className="mb-2 text-sm text-destructive">{error}</p>}<Button variant="outline" disabled={busy || !classified} onClick={save}><PlusIcon /> Salvar na KB</Button></div>;
 }
 function PlusIcon() { return <Wrench className="size-4" />; }
 
-function TicketCard({ c, otrsBase, defaultOpen, feedback, occurrenceId, evento, onSaved, classified }: { c: Candidato; otrsBase: string; defaultOpen: boolean; feedback?: boolean; classified: boolean; occurrenceId: string | null; evento: string; onSaved: () => void }) {
+function TicketCard({ c, otrsBase, defaultOpen, feedback, occurrenceId, evento, onSaved, classified, closed, refreshKey }: { c: Candidato; otrsBase: string; defaultOpen: boolean; feedback?: boolean; classified: boolean; closed: boolean; refreshKey: number; occurrenceId: string | null; evento: string; onSaved: () => void }) {
   const [open, setOpen] = useState(defaultOpen);
   const artigos = artigosDe(c);
   const resumo = artigos[artigos.length - 1]?.texto.replace(/\s+/g, " ");
@@ -379,7 +394,7 @@ function TicketCard({ c, otrsBase, defaultOpen, feedback, occurrenceId, evento, 
         </div>
         <ChevronDown className={`size-5 shrink-0 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
       </button>
-      {feedback && occurrenceId && artigos.length > 0 && artigos.map((n, i) => <FeedbackTicket key={`${occurrenceId}-${c.numero}-${i}`} c={c} oid={occurrenceId} classified={classified} solucao={n.texto} autor={n.autor} sourceDate={n.criado} {...(n.id ? { articleId: n.id } : {})} onSaved={onSaved} />)}
+      {feedback && occurrenceId && artigos.length > 0 && artigos.map((n, i) => <FeedbackTicket key={`${occurrenceId}-${c.numero}-${i}`} c={c} oid={occurrenceId} closed={closed} refreshKey={refreshKey} classified={classified} solucao={n.texto} autor={n.autor} sourceDate={n.criado} {...(n.id ? { articleId: n.id } : {})} onSaved={onSaved} />)}
       {open && (
         <div className="space-y-4 border-t p-4">
           <div className="grid gap-3 text-sm sm:grid-cols-3">

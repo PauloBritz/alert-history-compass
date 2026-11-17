@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { taxaSucesso } from "@/lib/kb";
+import { taxaSucesso } from "@/lib/kb-statistics";
 
 describe("taxaSucesso", () => {
   it("é null quando a solução nunca foi testada", () => expect(taxaSucesso(0, 0)).toBeNull());
