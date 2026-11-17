@@ -1,6 +1,6 @@
 # Roadmap
-- [ ] Corrigir avaliações, aplicação explícita, identidade contextual e histórico do V2
-- [ ] Executar testes de persistência em banco isolado e testes da interface
+- [x] Corrigir avaliações, aplicação explícita, identidade contextual e histórico do V2
+- [x] Executar testes de persistência em banco isolado e testes da interface
 - [ ] Entregar arquivos completos, SQL não executado, diagnóstico e instruções de revisão/rollback
 - [x] Ampliar recomendação sem histórico para validar soluções da KB e destacar Cadastrar solução em verde
 - [x] Base de conhecimento com votos (polegar) e taxa de sucesso
