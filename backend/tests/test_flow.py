@@ -141,3 +141,25 @@ def test_failure_after_corrective_save_is_atomic(client,monkeypatch):
         assert c.execute('SELECT count(*) AS n FROM el_evaluations').fetchone()['n']==0
         assert c.execute('SELECT count(*) AS n FROM el_solutions').fetchone()['n']==1
         assert c.execute("SELECT count(*) AS n FROM el_audit WHERE action='solution_saved'").fetchone()['n']==1
+
+
+def test_closed_occurrence_application_is_immutable(client):
+    oid=occurrence(client);sid=solution(client,oid)
+    client.post(f'/occurrences/{oid}/applications',json={'solution_id':sid,'resolved':True})
+    before=client.get(f'/occurrences/{oid}/history').json()
+    assert client.post(f'/occurrences/{oid}/applications',json={'solution_id':sid,'resolved':False}).status_code==409
+    assert client.post(f'/occurrences/{oid}/solutions',json={'procedure':'Another saved procedure','applied':True}).status_code==409
+    after=client.get(f'/occurrences/{oid}/history').json()
+    assert after['occurrence']==before['occurrence']
+    assert after['applications']==before['applications'] and after['audit']==before['audit']
+
+
+def test_parallel_classification_and_save_keep_link_snapshot_consistent(client):
+    oid=occurrence(client)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a=pool.submit(client.put,f'/occurrences/{oid}/classification',json={'name':'OTHER TYPE'})
+        b=pool.submit(client.post,f'/occurrences/{oid}/solutions',json={'procedure':'Concurrent saved procedure','applied':True})
+        assert a.result().status_code==200 and b.result().status_code==200
+    with connection() as c:
+        row=c.execute('SELECT a.type_id AS applied_type,l.type_id AS linked_type FROM el_applications a JOIN el_links l ON l.solution_id=a.solution_id WHERE a.occurrence_id=%s',(oid,)).fetchone()
+        assert row['applied_type']==row['linked_type']
