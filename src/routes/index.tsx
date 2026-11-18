@@ -89,7 +89,7 @@ function Index() {
       }
       if (version !== requestVersion.current) return;
       setNewOccurrence(false); setNewKey(null); toast.success("Consulta à base concluída");
-    } catch (e) { toast.error((e as Error).message); } finally {
+    } catch (e) { if (version === requestVersion.current) toast.error((e as Error).message); } finally {
       if (version === requestVersion.current) setLoading(false);
     }
   }
@@ -203,7 +203,7 @@ function Index() {
         <div className="mt-6 grid gap-6 lg:grid-cols-[320px_1fr]">
           <EventPanel data={data} />
 
-          <section>
+          <section className="min-w-0">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold">Procedimentos históricos do OTRS <span className="font-mono text-sm text-muted-foreground">({candidatos.length})</span></h2>
               <div className="flex rounded-lg border p-1 text-xs">
@@ -279,7 +279,7 @@ function Kpi({ icon: Icon, label, value, tone = "text-primary" }: { icon: typeof
 function EventPanel({ data }: { data: Resultado }) {
   const max = Math.max(1, ...Object.values(data.pesos));
   return (
-    <aside className="h-fit space-y-5 rounded-2xl border bg-card p-5 lg:sticky lg:top-20">
+    <aside className="min-w-0 h-fit space-y-5 rounded-2xl border bg-card p-5 lg:sticky lg:top-20">
       <div>
         <div className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Evento</div>
         <div className="mt-1 break-words font-mono text-sm text-primary">{data.evento}</div>
@@ -350,6 +350,7 @@ function FeedbackTicket({ c, oid, solucao, autor, articleId, sourceDate, onSaved
     setBusy(true); setError('');
     try {
       const r = await api<{id: string}>(`/occurrences/${oid}/solutions`, "POST", { procedure: solucao, applied: false, source: { ticket_number: c.numero, article_id: articleId ?? null, ticket_title: c.titulo, author: autor, source_date: sourceDate, content: solucao, metadata: c } });
+      if (!r.id) throw new Error('A API não confirmou o cadastro.');
       toast.success('Solução cadastrada na KB.');
       const k = await api<Knowledge>(`/occurrences/${oid}/recommendations`);
       setSolution(k.solutions.find(s => s.id === r.id) ?? null); onSaved();

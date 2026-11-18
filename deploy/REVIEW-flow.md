@@ -1,5 +1,7 @@
 # EventLens V2 — revisão e implantação controlada
 
+Atualização desta entrega: leia também FLOW-SWEEP.md, com inventário dos caminhos e 44 testes aprovados. Os módulos JS obsoletos mencionados abaixo foram removidos do V2; os dados e funções SQL legados permanecem intactos.
+
 Esta entrega altera apenas código. Nenhum servidor, LIVE, serviço systemd, configuração de produção ou banco existente foi acessado. A migração `backend/sql/002_flow_integrity.sql` **não foi executada**, nem mesmo no banco de testes. Os testes usaram `backend/tests/schema.sql`, uma estrutura descartável separada.
 
 ## Diagnóstico
